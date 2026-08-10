@@ -12,13 +12,17 @@ Scripts are iterated as `<name>_vN.m` rather than edited in place — e.g. `conc
 
 ## The two pipelines
 
-Both start from the same Step 1 (`concat_IES_v5.m`), then diverge:
+Both start from the same Step 1 (`concat_IES_v6.m`), then diverge:
 
-### Step 1: `concat_IES_v5.m` (current version)
+### Step 1: `concat_IES_v6.m` (current version)
 
-Loads `samba_w.mat`/`samba_e.mat` (not in this repo — must be on the MATLAB path or in the working directory), restricts both to the common overlap period 2013-09-11 to 2017-07-17, and extracts per-mooring temperature/salinity as flat variables (`tem_A`, `tem_AA`, ..., `sal_P1`, `sal_P8`, ...) plus `prew`/`pree` (pressure), `depw`/`depe` (depth), `lonw`/`lone` (longitude, sorted), and `dt`. Saves everything to `concat_IESsamba.mat` (gitignored — regenerate by running the script, requires the raw `samba_w`/`samba_e` inputs).
+Loads `samba_w.mat`/`samba_e.mat` (not in this repo — must be on the MATLAB path or in the working directory), restricts both to the common overlap period **2013-09-06 to 2022-12-11** (opened 2026-08-10; see below), and extracts per-mooring temperature/salinity as flat variables (`tem_A`, `tem_AA`, ..., `sal_P1`, `sal_P8`, ...) plus `prew`/`pree` (pressure), `depw`/`depe` (depth), `lonw`/`lone` (longitude, sorted), and `dt`. Saves everything to `concat_IESsamba.mat` (gitignored — regenerate by running the script, requires the raw `samba_w`/`samba_e` inputs).
 
-Earlier versions (`concat_IES.m`, `concat_IES_v2.m`, `concat_IES_v4.m`) are kept for comparison — `v4` aggregated all sites into single `tem_w`/`sal_w` matrices, which was a bug (mixed different moorings along the time axis, incompatible with downstream per-site calls); `v5` reverted to per-site variables while keeping `v4`'s usability improvements (progress messages, `-v7.3` save).
+**`v6` (2026-08-10) opened the date window.** `v5` hardcoded 2013-09-11–2017-07-17, matching the East array's availability at the time. Since then: `samba_w.mat` already covered 2009-03-18 to 2022-12-11 the whole time (unused past 2017 only because of this window); `samba_e.mat` was rebuilt from `Marions_code`'s Daily_Tau-based calibration (see "Upstream data pipeline" below) and now covers 2013-09-06 to 2023-09-24. The real overlap is bounded by `samba_w.mat`'s end date — **West is now the limiting side**, the reverse of the `v5`-era situation. Verified: `concat_IESsamba.mat` now spans 3383 days (~2.4x `v5`'s 1415), including West mooring **CC** for the first time (0% coverage in the old window; CC's instrument wasn't redeployed until mid-2019).
+
+**Not yet extended**: `mov_samba_marion*.m` still consumes `Total_TPUD1..8` from Marion's old `Full_Depth_OverturningEstimate_Cst_for_MHT.mat`, which reflects the pre-rebuild 2013-2017 window — the final Mov/mean/gyre calculation won't actually benefit from the wider `concat_IESsamba.mat` until `README_MOC` steps B-E (Ekman, shelf, topography, MOC estimate) are also rebuilt in `Marions_code` with the new East/West calibrated data. Step A (T/S profiles) is done; B-E are not.
+
+Earlier versions (`concat_IES.m`, `concat_IES_v2.m`, `concat_IES_v4.m`, `concat_IES_v5.m`) are kept for comparison — `v4` aggregated all sites into single `tem_w`/`sal_w` matrices, which was a bug (mixed different moorings along the time axis, incompatible with downstream per-site calls); `v5` reverted to per-site variables while keeping `v4`'s usability improvements (progress messages, `-v7.3` save).
 
 ### Step 2a: `mov_samba.m` — dynamic height only, not maintained further
 
