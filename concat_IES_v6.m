@@ -1,8 +1,19 @@
-%% Step 1 for MOV calculation: this is Claude correction on V4.
-% Concatenate and select TS files from Samba_West and Samba_East
+%% Step 1 for MOV calculation: opens the date window to the full overlap
+% available after the 2026-08 rebuild of samba_e.mat (see CLAUDE.md).
+%
+% v5 hardcoded 11-Sep-2013 to 17-Jul-2017, matching the East array's
+% availability at the time. Since then:
+%   - samba_w.mat already covered 2009-03-18 to 2022-12-11 the whole
+%     time (it just wasn't being used past 2017 due to this window).
+%   - samba_e.mat was rebuilt from Marions_code's Daily_Tau-based
+%     pipeline (a published, already-calibrated dataset) and now
+%     covers 2013-09-06 to 2023-09-24, instead of stopping at 2017.
+% The real overlap between the two is now bounded by samba_w.mat's
+% end date (2022-12-11), NOT samba_e.mat's -- West is the limiting
+% side now, the opposite of the v5-era situation.
 %
 % This script extracts temperature and salinity data from Samba moorings
-% for the common time period: 11-Sep-2013 to 17-Jul-2017
+% for the common time period: 06-Sep-2013 to 11-Dec-2022
 %
 % Temperature/salinity are kept as separate per-mooring variables
 % (tem_A, tem_AA, ..., sal_P1, sal_P2, ...) rather than concatenated
@@ -12,8 +23,8 @@
 clear; clc;
 
 %% Define time period (common to both datasets)
-t0 = datenum(2013, 9, 11);
-t1 = datenum(2017, 7, 17);
+t0 = datenum(2013, 9, 6);
+t1 = datenum(2022, 12, 11);
 
 %% ========================================================================
 % Process Samba_West
