@@ -53,6 +53,48 @@ A `total_direct` (independently computed, non-decomposed) is compared against `m
   3. The actual dominant cause: `S0=nansum(wsal.*dx2)/nansum(dx2)` and `V00=nansum(V0.*dx2)/nansum(dx2)` used `/` (MATLAB matrix right division), not `./` (elementwise). While `dx2` was a plain `[depth x 1]` column, `nansum(dx2)` was always a true scalar, where `/` and `./` agree — harmless. Once `dx2` became `[depth x time]` (fix #1 above), `nansum(dx2)` became `[1 x time]` too, and `A/B` between two same-size non-scalar arrays is a least-squares matrix division, not elementwise — this silently collapsed `S0` (and `V00`) to a **single best-fit scalar for the entire record** (confirmed: `size(S0)` was `[1 1]`, not `[1 3381]`) instead of one value per day, biasing every downstream quantity. Fixed (`v11`) by changing both to `./`. Also changed `mean_term`'s `sum(dx2)` to `nansum(dx2)` while in there — this repo's custom `nansum.m` (`Marions_code/functions/nan/`) returns NaN (not 0) when an entire reduced dimension is NaN, unlike plain `sum`, so a depth level with zero valid gaps on some day would have propagated NaN across that whole day's `mean_term`; didn't fire on this dataset but was inconsistent with every other reduction in the script.
   Confirmed (`v11`): residual mean=-1.06e-14 Sv, max=3.13e-13 Sv — back to the `v5`-era floating-point-noise baseline, now on the full 3381-day 2013-2022 dataset.
 
+## Known limitation: the 2017-08/2019-10 low-variance period in `mov` is a coverage artifact, not real quiescence
+
+**Observation (user, 2026-08-12):** looking at `mov_IES.png`, `mov`'s variance is visibly high from the start of the record to ~2017-09, much lower from ~2017-09 to ~2019-09, then high again from ~2019-09 to the end — but `mean_term` and `gyre` don't show this pattern. Investigated and confirmed quantitatively; root-caused to a real, ~2-year loss of spatial coverage in the deep/eastern part of the array, not a genuine oceanographic quiet period.
+
+**Confirmed with `std()` over three periods** (split points chosen from the actual instrument-gap boundaries found below, not from eyeballing the plot):
+
+| | 2013-09–2017-08 | 2017-08–2019-10 | 2019-10–2022-12 |
+|---|---|---|---|
+| `std(mov)` | 0.144 | **0.090** | 0.188 |
+| `std(mean_term)` | 39.26 | 42.23 | 41.30 |
+| `std(gyre)` | 0.080 | 0.101 | 0.118 |
+
+`mov` drops ~40% in the middle period and recovers after; `mean_term` stays flat (even ticks up slightly) and `gyre` rises monotonically. Neither shows the dip `mov` does.
+
+**Root cause — real instrument outages, found via per-site monthly coverage fractions:**
+- **P5 and P6: essentially zero coverage from 2017-08 to 2021-09/10** (~4 years). This was already noted in passing in `Marions_code/CLAUDE.md` ("P5/P6 have no instrument 2017-2021") but its effect on `mov`'s variance specifically hadn't been traced through until now.
+- **P8**: zero coverage 2018-04 to 2019-09/10.
+- **P4**: zero coverage 2019-02 to 2019-09/10.
+- **D**: a shorter gap, 2017-10 to 2018-04/05.
+- A, C, P1, P2 have essentially continuous coverage throughout.
+
+**Per-gap valid-day fraction in each period** (fraction of days with at least some valid depth for that gap):
+
+| Gap | 2013-09–2017-08 | 2017-08–2019-10 | 2019-10–2022-12 |
+|---|---|---|---|
+| A–C | 1.00 | 1.00 | 1.00 |
+| C–D | 1.00 | 0.74 | 0.99 |
+| D–P8 | 1.00 | 0.08 | 0.99 |
+| P8–P6 | 0.99 | **0.00** | 0.38 |
+| P6–P5 | 0.99 | **0.00** | 0.38 |
+| P5–P4 | 0.99 | **0.00** | 0.38 |
+| P4–P2 | 1.00 | 0.68 | 0.99 |
+| P2–P1 | 1.00 | 1.00 | 1.00 |
+
+Three of the eight gaps (`P8–P6`, `P6–P5`, `P5–P4` — everything touching P5/P6) have **zero** coverage for essentially the entire 2017-08/2019-10 window. Total section width (`sum(dx2)` per day) drops from ~3.8e9 (period 1) to ~9.5e8 (period 2, a **~75% drop**) and back to ~3.6e9 (period 3) once P4/P8 return in late 2019 (P5/P6 themselves don't fully return until 2021, but that alone is apparently enough to restore most of `mov`'s variance).
+
+**Why `mov` specifically, and not `mean_term`/`gyre`:** `mov` is the depth-integrated correlation between the zonal-mean velocity and salinity *anomaly profiles* (`vel_prime(z)`, `sal_prime(z)`) — it's fundamentally about baroclinic structure spanning the section's full depth. The three gaps lost are precisely the deep/eastern ones, where the deep return branch of the overturning circulation would be expected to show up. Losing them doesn't just remove noise — it removes the array's ability to see genuine deep baroclinic variability, so what's left (computed from a reduced, shallower/more-western subset) is quieter *because the observing system's sensitivity dropped*, not because the ocean did. `mean_term` (a single barotropic number per day, not sensitive to which particular gaps are present as long as depth-weighting is consistent) and `gyre` (per-gap local deviations, which don't need every gap simultaneously present) are structurally less exposed to this.
+
+**Practical implication:** treat `mov` values in 2017-08 to 2019-10 as **less reliable / likely biased toward zero variance** than the rest of the record — this is a data-coverage artifact, not a real trend or event, and should be flagged as such in any analysis or plot that uses this window. Not yet addressed in code (e.g. no gap-coverage-based confidence flag is currently attached to the output) — a natural follow-up would be to save a per-day "how many gaps contributed" or "total dx2" diagnostic alongside `mov`/`mean_term`/`gyre` in `mov_samba_marion*.m`'s output so downstream users can screen for this automatically instead of re-deriving it by hand.
+
+**Distinct from the `AREA_TOPO`/salinity-cutoff issue below** — that one is a *static*, depth-based masking inconsistency present throughout the *entire* record; this one is a *time-varying*, real instrument-outage issue affecting one specific ~2-year window. Both are legitimate, independent caveats.
+
 ## Upstream data pipeline (outside this repo)
 
 `mov_samba_marion*.m`'s inputs (`Total_TPUD1..8`, and transitively `samba_w.mat`/`samba_e.mat`) come from a much larger MATLAB pipeline at `~/research/sambar/renellys_sent/Marions_code/`, documented in `README_MOC` and `README_MHT` there (not in this repo). Traced through steps A–E of `README_MOC` on 2026-08-07; summary below so this doesn't need to be re-derived from scratch.
@@ -63,7 +105,24 @@ A `total_direct` (independently computed, non-decomposed) is compared against `m
 
 **Confirmed: `Total_TPUD1..8` already includes the topography correction, absolute reference, and Ekman.** Step E's script builds `Absolute_TPUD1..8` (baroclinic shear from dynamic height + absolute reference from real PIES bottom-pressure sensors + an ECCO mean-velocity offset at 1500 dbar), multiplies each by its per-gap `AREA_TOPO_i` profile, then adds per-gap Ekman (`Ekman_TPUD1..8`) — that sum *is* `Total_TPUD1..8`. So `mov_samba_marion*.m` does not need to (and currently does not) reapply any topography correction on the velocity side — it's already baked in.
 
-**Open question flagged, not yet resolved:** `mov_samba_marion*.m`'s own salinity masking (`p_cpiesW`/`p_cpiesE`, a binary NaN cutoff at a fixed depth per *site*) is inconsistent with the continuous, per-*gap* `AREA_TOPO_i` weighting already applied to the velocity it's multiplied against in `mov`/`mean`/`gyre`. E.g. the D–P8 gap's `AREA_TOPO_3` starts dropping below 1.0 at 940 dbar (a mid-gap ridge), far shallower than either site's own individual cutoff (D: 4850, P8: 1280) — so the velocity smoothly attenuates there while the salinity is either fully valid or fully NaN depending on the site-level cutoff. Worth investigating whether this creates a real inconsistency in the decomposition, or whether it's negligible in practice.
+**Open question, partially investigated (2026-08-12), not yet fixed:** `mov_samba_marion*.m`'s own salinity masking (`p_cpiesW`/`p_cpiesE`, a binary NaN cutoff at a fixed depth per *site*) is inconsistent with the continuous, per-*gap* `AREA_TOPO_i` weighting already applied to the velocity it's multiplied against in `mov`/`mean`/`gyre`. E.g. the D–P8 gap's `AREA_TOPO_3` starts dropping below 1.0 at 940 dbar (a mid-gap ridge), far shallower than either site's own individual cutoff (D: 4850, P8: 1280) — so the velocity smoothly attenuates there while the salinity is either fully valid or fully NaN depending on the site-level cutoff.
+
+Quantified per gap: within each gap's salinity-valid depth range, the fraction of nominal cross-sectional width that's actually topographically blocked (`1-AREA_TOPO`, "phantom width" — counted at full weight for `wsal`/`dx1`/`dx2` even though the real open area there is smaller or zero):
+
+| Gap | Salinity cutoff (dbar) | Mean `AREA_TOPO` in that range | Phantom width |
+|---|---|---|---|
+| A–C | 4620 | 0.75 | **24.7%** |
+| C–D | 4850 | 0.99 | 1.3% (negligible) |
+| D–P8 | 4850 | 0.84 | **15.6%** |
+| P8–P6 | 2150 | 1.00 | 0.0% |
+| P6–P5 | 4560 | 1.00 | 0.0% |
+| P5–P4 | 5000 (uncapped) | 0.96 | 4.4% |
+| P4–P2 | 5000 (uncapped) | 0.78 | **21.9%** |
+| P2–P1 | 5000 (uncapped) | 0.35 | **64.8%** |
+
+`P2–P1` is the worst case: `AREA_TOPO` is essentially 0 by the salinity cutoff, meaning nearly two-thirds of the "width" counted toward `wsal`/`V0`'s zonal averaging in the deep part of that gap is topographically nonexistent. This does **not** break the `mean+Mov+gyre == total_direct` algebraic identity (that holds regardless of what `dx1` contains, as long as it's used consistently — see the `v10`/`v11` fixes above), but it likely biases the *absolute values* of `V0`/`wsal`/`S0`/`mov`/`mean_term` toward whatever the "phantom" depths' salinity/velocity happen to be.
+
+**Why not fixed yet:** `Total_TPUD` (used as `geo`/`vel00` here) is already multiplied by `AREA_TOPO_i` in Step E (`Marions_code/Full_Depth_MOC/Full_Depth_OverturningEstimate_Cst_for_MHT_2013_2022.m`). To weight `dx1` by `AREA_TOPO` too (without double-counting it), this script would need the *pre*-`AREA_TOPO`-multiplication velocity (`Absolute_TPUD1..8`), which Step E computes internally but does not currently save — only the post-multiplication `Total_TPUD1..8` is in the output `.mat`. Reversing it via `Total_TPUD/AREA_TOPO` is not viable (blows up wherever `AREA_TOPO≈0`, exactly the depths of interest). A real fix requires re-running Step E to also save `Absolute_TPUD1..8`, then weighting `V0`/`wsal`/`dx2` (and, to stay algebraically consistent, `aux_total`/`aux_gyre` too) by `dx(gap)*AREA_TOPO_gap(z)` throughout `mov_samba_marion*.m` instead of the current flat `dx1`. Deferred pending explicit go-ahead, since it means rebuilding Step E again in the sibling `SAMBA_E_IES` repo.
 
 **Date range provenance:** the `2013-09-11`–`2017-07-17` window used throughout this repo isn't an independent choice — it's inherited directly from a hardcoded trim in `Full_Depth_OverturningEstimate.m` (`bad=find(dt_SAM<datenum(2013,9,11) | dt_SAM>datenum(2017,7,17))`), matching the East PIES array's (Samba-E / "GH") availability window at the time that pipeline was last run.
 
