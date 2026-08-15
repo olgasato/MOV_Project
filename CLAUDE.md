@@ -255,9 +255,35 @@ User's premise: for pure volume transport (MOC only -- explicitly does NOT apply
 
 **Conclusion: no bug found.** The ~8.8 Sv full-record gap has two distinct, both-real contributors, and neither is a computational error: (a) the already-documented 2017-2019 coverage-outage window (explains about half, per the earlier full-coverage-only-days test: gap shrinks from 8.8 to ~4.0 Sv when that window or any incomplete-coverage day is excluded), and (b) `AREA_TOPO`'s absence from the Pilot method, which explains the remaining ~4 Sv persisting even on full-coverage days. The baroclinic (relative) part -- the actual "beauty of the method" the user described -- checks out exactly as expected; the residual is entirely attributable to two known, already-documented methodological asymmetries between the two implementations, not to an undiscovered bug.
 
+## MOC Pilot v2: `moc_pilot_v2.m` (2026-08-15) -- adds an aggregate AREA_TOPO correction, closes most of the structural residual
+
+Follow-up to the root-cause investigation above: user asked "nao tem um jeito de considerarmos essa AREA_TOPO para o Pilot?" -- since no independent bathymetry exists for a single A-to-P1 span, built a data-driven proxy instead of acquiring new data:
+
+```
+AREA_TOPO_pilot(z) = sum_i[ dx_i * AREA_TOPO_i(z) ] / sum_i[ dx_i ]
+```
+
+a width-weighted average of the 8 real, **static** (depth-only, no time dimension) per-gap `AREA_TOPO_i(z)` profiles from Step E v2, weighted by each gap's own along-section distance `dx_i`. Deliberately built from the static profiles/weights only, *not* from the full array's own day-varying `dx2(z,t)` -- using `dx2` directly would have silently imported the full array's own coverage outages into the Pilot, defeating the purpose of an independent cross-check.
+
+**Side finding while building this**: `dx_total=sum(dx_i)` (the 8-gap along-section path, 7846km) is 26.6% *longer* than `v1`'s `dx_pilot` (direct A-P1 great-circle, 6197km) -- not a bug, a real geometric fact: two points on the same latitude (except the equator) are joined by a great circle that bows toward the pole, shorter than the constant-latitude arc the array physically follows. `v1`'s `dx_pilot` never affected `v1`'s `Psi`/MOC output (it's used to convert TPUD→velocity and immediately multiplied back by the identical value, canceling exactly -- same "any depth-constant factor cancels via the depth-mean removal" mechanism as the BPR≡LNM finding). `v2` switches to `dx_total=sum(dx_i)` throughout since `AREA_TOPO_pilot`'s weighted average needs the physically-correct along-section width.
+
+**Result**: closes most of the "structural" (coverage-independent) part of the gap. Restricting to full-coverage (8/8 gaps) days specifically, where the earlier investigation found a persistent ~4.0 Sv residual unexplained by coverage: with `AREA_TOPO_pilot` applied, that residual drops to **0.82 Sv** (~80% closed) -- full array 24.96 Sv vs. Pilot v2 25.78 Sv on those days, vs. 24.96 vs. 28.98 for `v1`. Over the full record (all coverage levels), the gap shrinks from 8.82 Sv (`v1`) to 5.60 Sv (`v2`): full array 20.93 Sv, Pilot v1 29.76 Sv, Pilot v2 26.54 Sv. Correlation with the full array's daily index is essentially unchanged (0.234 vs. 0.240) -- expected, since `AREA_TOPO_pilot` is a static depth correction, it shifts the overall level/shape but not day-to-day variability.
+
+**Coverage-threshold test (more precise than a fixed date window)**, using `n_gaps_valid` directly rather than the earlier "exclude 2017-08/2020-01" date range (which misses the second, smaller 2020-2022 coverage patch already flagged in the Mov section above):
+
+| Filter | Days | Full array | Pilot v1 | Pilot v2 |
+|---|---|---|---|---|
+| All days | 3382 | 20.9 Sv | 29.8 Sv (diff 8.8) | 26.5 Sv (diff 5.6) |
+| n_gaps≥5 | 2642 | 24.4 Sv | 28.6 Sv (diff 4.2) | 25.5 Sv (diff 1.1) |
+| n_gaps=8 (perfect) | 1836 | 25.0 Sv | 29.0 Sv (diff 4.0) | 25.8 Sv (diff **0.8**) |
+
+Confirms both real effects cleanly separated: `AREA_TOPO` alone (not coverage) explains ~80% of the gap that remains even at perfect coverage; coverage (not `AREA_TOPO`) explains the sharp additional widening once `n_gaps_valid` drops below ~5 (the remaining 5.6 Sv full-record gap is now overwhelmingly a coverage-outage effect, since it's only 0.8 Sv on good-coverage days).
+
+Outputs: `moc_pilot_v2_vs_full_IES.png` (3-way MOC(t): full array, Pilot v1 no-topo, Pilot v2 with-topo), `moc_pilot_v2_profile_comparison_IES.png` (Kersalé-style time-mean profile overlay, full array vs. Pilot v2), `moc_pilot_v2.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
-- `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png` — committed (not gitignored).
+- `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat`, `moc_pilot_v2.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png`, `moc_pilot_v2_vs_full_IES.png`, `moc_pilot_v2_profile_comparison_IES.png` — committed (not gitignored).
