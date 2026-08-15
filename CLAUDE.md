@@ -198,8 +198,41 @@ Original plan: define MOC as "the overturning-circulation volume-transport compo
 
 **Result**: `MOC` (45-day lowpass) mean=**20.9 Sv**, std=11.3 Sv, typical depth-of-maximum ~1330-1540dbar -- comparable in magnitude to RAPID's ~17 Sv at 26°N, a reassuring cross-check given the very different array/method. Same graded coverage shading available (`n_gaps_valid` computed, not yet plotted on these particular figures). Outputs: `moc_streamfunction_hovmoller.png` (Ψ(z,t), depth-time), `moc_streamfunction_mean_profile.png` (time-mean Ψ(z) ± 1 std, the Kersalé-Figure-2-style plot), `moc_index_IES.png` (MOC(t) raw vs. lowpass), `moc_streamfunction_v1.mat`.
 
+## MOC "Pilot" method: `moc_pilot_v1.m` (2026-08-15) -- two-endpoint (A-P1) dynamic-height-difference estimate, for comparison against the full 8-gap streamfunction
+
+Requested to reproduce the red "Pilot" curve in Kersalé et al. (2021) Figure 2a, which estimates the MOC from the dynamic-height difference between just the two basin-edge sites instead of integrating all 8 gaps. User's explicit choice on a 3-way clarifying question: use BPR (bottom pressure) absolute referencing at **both** endpoints (site A, West edge; site P1, East edge) -- not baroclinic-only shear with a level-of-no-motion assumption.
+
+**P1 confirmed as the true East edge of the array**: `position_East.m` gives `cpiesE(1).lon=17.5576`°E for P1, the largest (easternmost) longitude of all 8 East sites (P2=17.30°, P4=15.00°, P5=11.20°, P6=7.45°, P8≈0°) -- and `cpiesW(1).lon=-51.5`°W for A is the most-negative (westernmost) of the West sites. So A-to-P1 does span the full basin in one hop, as intended.
+
+**Not built from Step E v2's saved output directly** -- that `.mat` only has the final per-gap `Total_TPUD`/`Absolute_TPUD_preTopo` (already resolved to 8 gaps), not the intermediate `Gpan`/`pres`/`rhob` needed to construct a *new*, single A-to-P1 "gap". Reloads the same raw sources Step E v2 does (`samba_w.mat` for A; `ies/Wrk/IES_FrSA_SAMBA_6PIES.mat` + `ies_profiles/Wrk/IES_Make_Profiles_FrSA_SAMBA_6PIES.mat` for P1; `Ekman_transports_9pies.mat`'s `ekmanN_AtoZ`, the whole-basin Ekman total already computed alongside the per-gap `ekmanN_i`) and reruns just the A/P1 slice of Step E v2's machinery.
+
+**Formula: mirrors gap 1 (A-C) exactly, substituting P1 for C** -- rather than deriving from scratch or guessing which of the 8 gaps' (non-uniform, direction-dependent) sign/ordering conventions to copy (checked: e.g. gap1 and gap3's `RefTPUD` formulas have opposite term order/sign despite looking structurally similar, and it's not a simple "shallow vs. deep" or "west vs. east" rule -- looks hand-derived per gap in the original code, not from one universal pattern). This is a safe analogy because **P1 is actually the *shallowest* East site** (`p_cpiesE(1)=1280dbar`, shallower even than A's 1370dbar) despite being the far-East edge -- so A and C's shallow/deep relationship in gap 1 (A=1370 shallow, C=4620 deep) maps directly onto A and P1 here, with P1 now playing the "shallow reference-index" role and A playing the "deep, own-profile-for-correction" role:
+- `Gpan_AtoP1_corr = Gpan_A(p_ind_A,:) - Gpan_A(p_ind_P1,:)` (A's own profile at both bottom depths, demeaned)
+- `pres_AtoP1 = pres_A - Gpan_AtoP1_corr.*rhob_A` (project A's bottom pressure up to P1's shallower depth)
+- `RefTPUD_pilot = (pres_AtoP1 - pres_P1) / (f*rhob_P1)`, `RelTPUD_pilot = -(1/f)*(Gpan_P1-Gpan_A)` (same east-minus-west + sign-flip convention as all 8 gaps)
+- `Offset_pilot = RefTPUD_pilot - RelTPUD_pilot(p_ind_P1,:)` (applied at P1's index, the shallower site)
+
+**No `AREA_TOPO` correction** -- `topo_corr_msm60.mat` only has per-adjacent-gap topographic width, nothing for a single A-to-P1 span. Uses the plain `gsw_distance` between A's and P1's lon/lat (6197 km). A genuine simplification vs. the full method, consistent with "Pilot" being the simpler of the two methods being compared, not an oversight.
+
+**Streamfunction**: same construction as `moc_streamfunction_v1.m` (remove the depth-mean/barotropic component so `Psi` closes to ~0 at depth, cumsum from the surface down, 45-day lowpass, `MOC(t)=max_z Psi(z,t)`) -- since there's only one "gap" here, the depth-mean removal is a plain `nanmean` over depth of the A-P1 velocity (no `AREA_TOPO`-weighted `dx2`, width is depth-constant). Verified `mean(Psi_pilot at max depth)=-2e-16` Sv (closes as expected). Same no-leading-minus sign convention as the full streamfunction -- confirmed correct by checking the resulting mean profile independently: rises smoothly from ~0 at the surface to a peak ~1400-1600dbar, back to ~0 at the bottom, same shape as the full array's already-validated profile.
+
+**Result**: Pilot MOC (45-day lowpass) mean=**29.8 Sv**, std=7.0 Sv, peak of the time-mean profile at 1480dbar (vs. full array's 20.1 Sv at 1320dbar) -- same overall shape and depth-of-maximum as the full array (see `moc_profile_comparison_IES.png`, a Kersalé-Figure-2-style overlay of both time-mean profiles ±1 std), but a materially higher/smoother index, and a modest correlation (0.24) between the two daily indices over the full record.
+
+**The intensity gap is mostly explained by the 2017-2019 coverage artifact, not a real methodological difference**: comparing means with/without the already-documented low-coverage window (2017-08-01 to 2020-01-01, when P5/P6/P4/P8 were down -- see the Mov coverage-artifact section above) --
+
+| Period | Full array | Pilot | Diff |
+|---|---|---|---|
+| Full record (2013-09/2022-12) | 20.9 Sv | 29.8 Sv | 8.8 Sv |
+| Excluding 2017-08/2020-01 | 24.7 Sv | 28.6 Sv | **4.0 Sv** |
+| Only 2017-08/2020-01 | 10.3 Sv | 32.9 Sv | 22.6 Sv |
+
+Since the Pilot only depends on A and P1 (neither of which had an outage in that window), it stays near its normal level throughout, while the full array's index is pulled down hard by losing 4 of 8 gaps -- independently confirming that dip is instrumental, not oceanographic (the Pilot shows no corresponding dip on `moc_pilot_vs_full_IES.png`). Excluding that window closes more than half the gap (8.8→4.0 Sv); the remaining ~4 Sv likely reflects the Pilot's real simplifications (no `AREA_TOPO`, only 2 points vs. 8 spatially-resolved gaps).
+
+Outputs: `moc_pilot_vs_full_IES.png` (MOC(t) overlay, both methods), `moc_profile_comparison_IES.png` (time-mean Ψ(z) ±1 std overlay, from the separate `moc_profile_comparison_v1.m` which just reloads both `.mat` outputs -- no recomputation), `moc_pilot_v1.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
+- `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png` — committed (not gitignored).
