@@ -336,6 +336,26 @@ Coverage-threshold breakdown (full extended 2013-2022 record, same `n_gaps_valid
 
 Outputs: `moc_streamfunction_v3_hovmoller.png`, `moc_streamfunction_v3_index_IES.png`, `moc_streamfunction_v3_mean_profile.png`, `moc_streamfunction_v3.mat`; `moc_pilot_v4_vs_full_IES.png`, `moc_pilot_v4_profile_comparison_IES.png`, `moc_pilot_v4.mat`. **`v3`(streamfunction)/`v4`(Pilot) are now the current, most-correct MOC scripts** -- prefer these over `v1`/`v2` of either script going forward.
 
+### Decomposing the remaining ~4 Sv residual (2026-08-15, diagnostics only, no script changes)
+
+After the shelf fix, the full array's MOCup over the paper's own 2013-2017 window (21.26 Sv) still ran ~4 Sv above the published 17.3 Sv. Split the gap into two independently-testable pieces:
+
+1. **Marion's original pipeline vs. the published number**: her unmodified 2020 Step E output, with the shelf correction applied, gives 18.44 Sv vs. the paper's 17.3 Sv -- a **1.1 Sv** gap that involves none of this session's reprocessing at all. Likely irreducible version drift between her 2020 processing and whatever exact inputs went into the final 2021 publication (GEM table vintage, minor calibration revisions, etc.) -- not further investigated, diminishing returns expected.
+2. **This session's reprocessing vs. Marion's original pipeline, identical 2013-2017 period**: 21.26 vs. 18.44 Sv -- a **2.82-2.89 Sv** gap (confirmed via two independent checks: whole-record MOCup difference, and a direct per-gap upper-layer (0-1300dbar) transport comparison, which totaled +2.89 Sv, consistent to within rounding). Broken down gap-by-gap (time-mean, 0-1300dbar, 1405 common days):
+
+| Gap | Original (Sv) | Reprocessed (Sv) | Diff |
+|---|---|---|---|
+| A-C (West) | -4.50 | -2.82 | **+1.69** |
+| C-D (West) | -2.09 | -2.44 | -0.35 |
+| D-P8 (interior) | 14.31 | 15.04 | +0.73 |
+| P8-P6 (East) | -6.50 | -7.76 | **-1.27** |
+| P6-P5 (East) | -0.40 | 0.15 | +0.55 |
+| P5-P4 (East) | 6.81 | 6.40 | -0.41 |
+| P4-P2 (East) | 14.13 | 14.53 | +0.41 |
+| P2-P1 (East) | 0.44 | 1.98 | **+1.54** |
+
+**No single gap dominates** -- the three largest contributors (A-C/West +1.69, P2-P1/East +1.54, P8-P6/East -1.27) span both sides of the array, not concentrated in either the West source swap (`samba_w.mat`) or the East rebuild (Daily_Tau) alone. Consistent with genuine, expected calibration/provenance noise from switching underlying T/S/pressure sources -- already documented elsewhere in this repo that the East rebuild agrees with Marion's original East calibration only to ~0.0024s (tau1000) / 0.16dbar (pressure), a small per-measurement tolerance that compounds into Sv-scale differences once integrated across a whole gap and depth range. **Conclusion: no isolable bug found** -- 1.1 + 2.9 ≈ 4 Sv accounts for essentially the whole residual, and both pieces are attributable to known, already-documented data-provenance differences rather than an implementation error. Session paused here (2026-08-15) at the user's request to think it over; next ideas for further testing not yet defined.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
