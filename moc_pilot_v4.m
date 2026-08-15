@@ -1,0 +1,252 @@
+% MOC "Pilot" method, v4: adds the same shelf transport correction found
+% missing in moc_streamfunction_v3.m's investigation (see that script's
+% header for the full root-cause story -- Marion's Step E pipeline loads
+% `ecco/Wrk/ECCO_TPUD_ShelfBits.mat` but never adds it to Total_TPUD).
+%
+% For a fair comparison, the Pilot needs the SAME correction: both
+% methods only resolve the section BETWEEN their outermost
+% instruments (A to P1 either way -- the Pilot skips intermediate sites,
+% but its two endpoints are the same A/P1 moorings gap 1 and gap 8 use),
+% so both exclude the same coastal shelf regions inshore of those
+% moorings in the same way. West_TPUD/East_TPUD_new are static
+% (time-invariant), so this is a single depth profile added identically
+% to every day, exactly as in v3.
+%
+% Everything else is unchanged from v3: v1's BPR-referenced RelTPUD/
+% RefTPUD/Offset derivation, v2's aggregate AREA_TOPO_pilot(z), v3's
+% Kersale-definition streamfunction (RAW cumulative transport, no
+% depth-mean removal, evaluated at h_star found from the Pilot's own
+% time-mean profile).
+%
+% v4 (2026-08-15): adds the shelf correction.
+
+clear;clc;
+
+prefix_marion='/Users/olga/research/sambar/renellys_sent/Marions_code/';
+addpath([prefix_marion,'functions/seawater/']);
+addpath([prefix_marion,'functions/positions_pies']);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Ekman (whole-basin A-to-P1 total)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load([prefix_marion,'ccmp/Wrk/Ekman_transports_9pies.mat'],'ekmanN_AtoZ','dt');
+dt_ekman=dt; clear dt
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% West: site A pressure + T/S, from samba_w.mat
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load([prefix_marion,'MOV/samba_w.mat'],'pres_A','dt','Salinity_A','Temperature_A','presrange')
+dt_SAM=dt; clear dt
+
+n_pad=531-numel(presrange);
+presrange=[presrange; (presrange(end)+10:10:presrange(end)+10*n_pad)'];
+Salinity_A=[Salinity_A; NaN(n_pad,size(Salinity_A,2))];
+Temperature_A=[Temperature_A; NaN(n_pad,size(Temperature_A,2))];
+clear n_pad
+Pressure_SAM=presrange; clear presrange
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% East: site P1 pressure (My Fields) + T/S (Daily_Tau rebuild)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load([prefix_marion,'ies/Wrk/IES_FrSA_SAMBA_6PIES.mat'],'pres_P1','dt')
+dt_GH=dt; clear dt
+
+load([prefix_marion,'ies_profiles/Wrk/IES_Make_Profiles_FrSA_SAMBA_6PIES.mat'], ...
+    'Temperature_P1','Salinity_P1','presrange')
+Pressure_GH=presrange; clear presrange
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Positions and along-section width (v2's dx_total=sum(dx_i))
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+position_West
+position_East
+lon8=[cpiesW([1 5 6]).lon cpiesE([1 2 4 5 6 8]).lon];
+lat8=[cpiesW([1 5 6]).lat cpiesE([1 2 4 5 6 8]).lat];
+dx_i=gsw_distance(lon8,lat8,0);
+dx_total=sum(dx_i);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Aggregate AREA_TOPO_pilot(z) -- identical construction to v2/v3
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load([prefix_marion,'Full_Depth_MOC/Wrk/Full_Depth_OverturningEstimate_Cst_for_MHT_2013_2022_v2.mat'], ...
+    'AREA_TOPO_1','AREA_TOPO_2','AREA_TOPO_3','AREA_TOPO_4','AREA_TOPO_5','AREA_TOPO_6','AREA_TOPO_7','AREA_TOPO_8','Pressure');
+AT_grid=Pressure; clear Pressure
+AT=[AREA_TOPO_1(:) AREA_TOPO_2(:) AREA_TOPO_3(:) AREA_TOPO_4(:) AREA_TOPO_5(:) AREA_TOPO_6(:) AREA_TOPO_7(:) AREA_TOPO_8(:)];
+AREA_TOPO_pilot_grid=(AT*dx_i(:))/dx_total;
+clear AREA_TOPO_1 AREA_TOPO_2 AREA_TOPO_3 AREA_TOPO_4 AREA_TOPO_5 AREA_TOPO_6 AREA_TOPO_7 AREA_TOPO_8 AT
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Geopotential anomaly (relative to sea surface)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Gpan_A=sw_gpan(Salinity_A,Temperature_A,Pressure_SAM(:));
+Gpan_P1=sw_gpan(Salinity_P1,Temperature_P1,Pressure_GH(:));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Bottom pressure indices/densities (A=1370dbar, P1=1280dbar -- see
+%%% v1's header for why this is the right shallow/deep pairing)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+p_ind_A=find(Pressure_SAM==1370);
+p_ind_P1=find(Pressure_GH==1280);
+
+rhob_A=nanmean(sw_dens(Salinity_A(p_ind_A,:),Temperature_A(p_ind_A,:),Pressure_SAM(p_ind_A)));
+rhob_P1=nanmean(sw_dens(Salinity_P1(p_ind_P1,:),Temperature_P1(p_ind_P1,:),Pressure_GH(p_ind_P1)));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% BPR reference correction (same as v1/v2/v3)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Gpan_AtoP1_corr=Gpan_A(p_ind_A,:)-Gpan_A(p_ind_P1,:);
+Gpan_AtoP1_corr=Gpan_AtoP1_corr-nanmean(Gpan_AtoP1_corr);
+
+pres_A=pres_A'*1e+04;
+pres_P1=pres_P1*1e+04;
+pres_A=pres_A-nanmean(pres_A);
+pres_P1=pres_P1-nanmean(pres_P1);
+
+pres_AtoP1=pres_A-(Gpan_AtoP1_corr.*rhob_A);
+clear Gpan_AtoP1_corr
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Align West/East/Ekman on their common dt
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+[dt_tmp,i_SAM,i_GH]=intersect(dt_SAM,dt_GH);
+[dt,i_tmp,i_ekman]=intersect(dt_tmp,dt_ekman);
+i_SAM=i_SAM(i_tmp); i_GH=i_GH(i_tmp);
+clear dt_tmp i_tmp
+
+fprintf('Aligned dt: %d common days (%s to %s)\n',numel(dt),datestr(dt(1)),datestr(dt(end)));
+
+Gpan_A=Gpan_A(:,i_SAM); pres_A=pres_A(i_SAM); pres_AtoP1=pres_AtoP1(i_SAM);
+Gpan_P1=Gpan_P1(:,i_GH); pres_P1=pres_P1(i_GH);
+ekmanN_AtoZ=ekmanN_AtoZ(i_ekman);
+clear dt_SAM dt_GH dt_ekman i_SAM i_GH i_ekman
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Throw out data below 5150dbar (same cutoff as Step E v2)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+bad=find(Pressure_SAM>5150);
+Gpan_A(bad,:)=[]; Pressure_SAM(bad)=[];
+clear bad
+bad=find(Pressure_GH>5150);
+Gpan_P1(bad,:)=[]; Pressure_GH(bad)=[];
+clear bad
+assert(isequal(Pressure_SAM,Pressure_GH),'Pressure_SAM/Pressure_GH differ after the >5150dbar trim.');
+Pressure=Pressure_SAM;
+clear Pressure_SAM Pressure_GH
+
+assert(isequal(Pressure,AT_grid(AT_grid<=5150)),'AREA_TOPO_pilot grid does not match Pressure after trim.');
+AREA_TOPO_pilot=AREA_TOPO_pilot_grid(AT_grid<=5150);
+clear AT_grid AREA_TOPO_pilot_grid
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Relative + reference, same construction as v1/v2/v3
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+RelTPUD_pilot=(1./sw_f(-34.5)).*(Gpan_P1 - Gpan_A);
+RelTPUD_pilot=-RelTPUD_pilot;
+
+RefTPUD_pilot=((pres_AtoP1 - pres_P1))./(sw_f(-34.5).*rhob_P1);
+RefTPUD_pilot=RefTPUD_pilot-nanmean(RefTPUD_pilot);
+
+Offset_pilot=RefTPUD_pilot-RelTPUD_pilot(p_ind_P1,:);
+
+Absolute_TPUD_pilot=NaN*ones(size(RelTPUD_pilot));
+for i=1:length(Pressure)
+    Absolute_TPUD_pilot(i,:)=RelTPUD_pilot(i,:)+Offset_pilot;
+end
+clear i p_ind_A p_ind_P1
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Apply the aggregate AREA_TOPO_pilot(z) correction, then Ekman
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Absolute_TPUD_pilot=Absolute_TPUD_pilot.*AREA_TOPO_pilot;
+
+Pressure_Ekman=[0:10:60]';
+Total_TPUD_pilot=Absolute_TPUD_pilot;
+for i=1:length(Pressure_Ekman)
+    pin=find(Pressure==Pressure_Ekman(i));
+    Total_TPUD_pilot(pin,:)=Absolute_TPUD_pilot(pin,:)+ekmanN_AtoZ(:)'./60;
+end
+clear i pin Absolute_TPUD_pilot
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% NEW (v4): shelf transport correction, same static profile v3 uses
+%%% for the full array -- see that script's header for the full
+%%% root-cause story.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load([prefix_marion,'ecco/Wrk/ECCO_TPUD_ShelfBits.mat'],'West_TPUD','East_TPUD_new');
+pres_shelf_grid=(0:10:5300)';
+[~,ia,ib]=intersect(Pressure,pres_shelf_grid);
+assert(isequal(ia(:),(1:numel(Pressure))'),'Pressure is not a subset of the shelf grid as expected');
+shelf_profile=West_TPUD(ib)+East_TPUD_new(ib);
+fprintf('Shelf correction: West=%.2f Sv, East=%.2f Sv (static, added to every day)\n', ...
+    nansum(West_TPUD)*10/1e6, nansum(East_TPUD_new)*10/1e6);
+clear West_TPUD East_TPUD_new pres_shelf_grid ia ib
+
+Total_TPUD_pilot=Total_TPUD_pilot+shelf_profile;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Kersale definition: RAW cumulative transport (now +shelf), no
+%%% depth-mean removal, evaluated at h_star found from the Pilot's OWN
+%%% time-mean profile.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+pre=Pressure; clear Pressure
+dz=mean(diff(pre));
+
+Psi_raw=cumsum(Total_TPUD_pilot,1,'omitnan')*dz/1e6;
+Psi_raw_mean=nanmean(Psi_raw,2);
+[~,imax_mean]=max(Psi_raw_mean);
+h_star_pilot=pre(imax_mean);
+fprintf('h_star (Pilot, time-mean transition depth): %d dbar\n',h_star_pilot);
+
+MOCup_pilot_raw=Psi_raw(imax_mean,:);
+MOCup_pilot_low=lowpass_filter(MOCup_pilot_raw,45);
+fprintf('LOWPASS (45-day) Pilot v4 MOCup at h_star: mean=%.4f Sv, std=%.4f Sv\n', nanmean(MOCup_pilot_low), nanstd(MOCup_pilot_low));
+
+Psi_low=nan(size(Psi_raw));
+for zz=1:size(Psi_raw,1)
+    Psi_low(zz,:)=lowpass_filter(Psi_raw(zz,:),45);
+end
+Psi_std=nanstd(Psi_low,0,2);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Compare against the corrected full-array method (v3)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+s_full=load('moc_streamfunction_v3.mat');
+
+[dt_common,ia,ib]=intersect(dt,s_full.dt);
+fprintf('Overlay common dt: %d days\n',numel(dt_common));
+
+figure('Position',[100 100 900 500])
+plot(dt_common,s_full.MOCup_low(ib),'linewidth',1.5); hold on
+plot(dt_common,MOCup_pilot_low(ia),'r','linewidth',1.5)
+legend('Full array (8 gaps)','Pilot (A-P1, BPR + AREA\_TOPO)')
+title('MOC_{up} index at 34.5^oS, Kersale definition + shelf: full array vs. Pilot (45-day lowpass)','fontsize',13)
+ylabel('MOC_{up} (Sv)')
+datetick('x',12);grid;axis('tight')
+set(gca,'linewidth',1,'fontsize',14)
+print -dpng -r150 moc_pilot_v4_vs_full_IES
+
+fprintf('\nMeans over common period: Full=%.2f Sv (h*=%d), Pilot=%.2f Sv (h*=%d)\n', ...
+    nanmean(s_full.MOCup_low(ib)), s_full.h_star, nanmean(MOCup_pilot_low(ia)), h_star_pilot);
+fprintf('corr(full,pilot)=%.3f\n', corr2_nan(s_full.MOCup_low(ib),MOCup_pilot_low(ia)));
+
+figure('Position',[500 100 650 650])
+hold on
+fill([s_full.Psi_raw_mean-s_full.Psi_std;flipud(s_full.Psi_raw_mean+s_full.Psi_std)],[s_full.pre;flipud(s_full.pre)],[0.8 0.85 1],'EdgeColor','none','FaceAlpha',0.6)
+fill([Psi_raw_mean-Psi_std;flipud(Psi_raw_mean+Psi_std)],[pre;flipud(pre)],[1 0.8 0.8],'EdgeColor','none','FaceAlpha',0.6)
+p1=plot(s_full.Psi_raw_mean,s_full.pre,'b','linewidth',2);
+p2=plot(Psi_raw_mean,pre,'r','linewidth',2);
+plot([0 0],[0 max(pre)],'k--')
+set(gca,'YDir','reverse')
+xlabel('\Psi (Sv)'); ylabel('Pressure (dbar)')
+title({'Time-mean MOC cumulative transport vs. depth at 34.5^oS','Kersale definition + shelf (shading = +/-1 std)'},'fontsize',12)
+legend([p1 p2],{'Full array (8 gaps)','Pilot (A-P1)'},'Location','southeast')
+grid on
+print -dpng -r150 moc_pilot_v4_profile_comparison_IES
+
+save('moc_pilot_v4.mat','dt','pre','Psi_raw','Psi_low','h_star_pilot','MOCup_pilot_raw','MOCup_pilot_low','Psi_raw_mean','Psi_std')
+
+function r=corr2_nan(a,b)
+ok=~isnan(a)&~isnan(b);
+cc=corrcoef(a(ok),b(ok));
+r=cc(1,2);
+end
