@@ -664,6 +664,14 @@ User's direct observation: in Kersalé et al. (2021)'s Figure 5, the pilot and f
 
 Outputs: `moc_lag_analysis_2013_2017.m`, `moc_lag_analysis_2013_2017_IES.png`.
 
+### Following up: do the weak-correlation windows coincide with elevated A/P1 noise? Yes, especially for P1
+
+Direct test (`moc_weak_windows_vs_noise.m`): for the same 6-month sliding windows as the lag analysis, computed the raw full-array-vs-Pilot correlation alongside each site's local noise level (`std(diff(tau1000))` within that window) for sites A and P1.
+
+**Correlation between window-correlation and local noise**: site A `r=-0.114` (weak), site P1 `r=-0.343` (moderate, right-signed -- higher P1 noise → lower window correlation). Visually (`moc_weak_windows_vs_noise_IES.png`), P1's noise shows a clear long-term *declining* trend from 2014 through late 2016, reaching its minimum right around late 2016/early 2017 -- exactly when window correlation peaks (0.6-0.82, the best stretch of the whole 2013-2017 record, first identified in the lag-analysis section above). Site A's noise also declines somewhat over the same period but less monotonically and less tightly coupled to the correlation pattern.
+
+**Conclusion**: a real, moderate, directionally-consistent relationship exists between P1's raw measurement noise and how well the Pilot tracks the full array, driven mainly by a *long-term trend* (P1 got quieter over 2014-2017, and Pilot-vs-full agreement improved over the same span) rather than noise explaining every individual weak window (e.g. the Sep-Nov 2014 dip doesn't coincide with P1's peak noise specifically). Site A's noise is not a strong driver of the window-to-window correlation pattern by this metric. This refines (doesn't just restate) the earlier `tau1000` noise finding: it's not only that A and P1 are noisier *sites* on average -- P1's noise *level itself varies over time*, and that time-variation measurably tracks the Pilot's reliability.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
