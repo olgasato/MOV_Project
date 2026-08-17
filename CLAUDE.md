@@ -496,6 +496,27 @@ Both `moc_streamfunction_v4.m` and `moc_pilot_v4.m`/`v5.m` add the same static s
 
 **Conclusion**: the shelf correction affects the Pilot the same systematic way it affects the full array -- a near-constant shift of magnitude matching the total shelf transport, no meaningful extra noise introduced. Expected and consistent, not a new concern.
 
+## Restricting the time-mean profile to exactly Kersalé et al. (2021)'s own window: `moc_profile_comparison_2013_2017.m` (2026-08-17)
+
+User's observation: every profile-comparison figure so far (`moc_pilot_v2/v3/v4/v5_profile_comparison_IES.png`) averages `Psi_raw` over the *full* 2013-2022 record -- not the paper's own 2013-09-11/2017-07-17 window specifically, which is what Figure 2a actually shows. Confirmed directly: none of the existing figures restrict to that period.
+
+`moc_profile_comparison_2013_2017.m` reuses the already-saved `Psi_raw` `[depth x time]` fields from `moc_streamfunction_v4.mat` and `moc_pilot_v5.mat` directly (no pipeline rerun needed -- `Psi_raw` is a per-day quantity, identical regardless of which sub-period is later averaged over) and recomputes the time-mean profile and `h_star` using *only* the 1405 days in the paper's window.
+
+**Result: a much closer match to the paper than the full-2013-2022 comparison.**
+
+| | `h_star` | Peak |
+|---|---|---|
+| Full array (this repo, 2013-2017 only) | 1320dbar | 20.31 Sv |
+| Full array (paper) | 1315dbar | 17.3 Sv |
+| Pilot (this repo, 2013-2017 only) | 1270dbar | 18.77 Sv |
+| Pilot (paper) | 1315dbar | 17.7 Sv |
+
+Both `h_star` values now land within 45dbar of the paper's 1315dbar (vs. 1190/1280dbar for the full 2013-2022 comparison), and the Pilot's peak (18.77 Sv) is within ~1.1 Sv of the paper's 17.7 Sv -- much closer than any full-record comparison achieved. Visually (`moc_profile_comparison_2013_2017_IES.png`), the full-array and Pilot curves now closely track each other through most of the water column (0-3000dbar), only diverging more visibly below ~3500dbar -- structurally similar to what Figure 2a shows, unlike the full-2013-2022 comparison where the two curves separated much earlier and more severely.
+
+**Confirms period-matching was a real, previously-uncontrolled factor** on top of the calibration-window/GEM-vintage/shelf issues already documented -- averaging over the extended 2013-2022 record (including the 2017-2019 coverage outage and whatever secular drift exists in the West GEM table) measurably degrades the match to the paper beyond what the methodology differences alone would predict.
+
+Outputs: `moc_profile_comparison_2013_2017_IES.png`, `moc_profile_comparison_2013_2017.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
