@@ -482,6 +482,20 @@ Direct request: build the A-to-P1 calculation using the *same* `V0`/`dx2`/`vel00
 
 **Together, these three tests give a complete, mechanistically-understood picture of the full-array-vs-Pilot comparison**: the baroclinic part telescopes exactly (proven twice now, algebraically and numerically); a reduced-but-still-wide gap subset (1,2,3,7,8) tracks the Pilot's mean reasonably outside outage periods but is noisier; a narrow-gap-only subset (1,8) is a fundamentally different, much-too-narrow construction that shouldn't be expected to match the Pilot at all; and the true full-array method's own remaining discrepancies (already documented in the sections above -- calibration-window, GEM-vintage, shelf correction) are the real, substantive open items, not something about "using few sites" per se.
 
+## Quantifying the shelf correction's effect on the Pilot specifically (2026-08-17)
+
+Both `moc_streamfunction_v4.m` and `moc_pilot_v4.m`/`v5.m` add the same static shelf-transport correction (`West_TPUD=-4.51`Sv, `East_TPUD_new≈0`, see the "MOC shelf-transport fix" section above) for a fair comparison -- but its effect had only been quantified for the full array directly. Since `moc_pilot_v3.mat` (no shelf) and `moc_pilot_v4.mat` (+shelf) differ *only* in this one correction (confirmed from `v4.m`'s own header: "adds the shelf correction" is the sole change from `v3`), compared them directly to isolate the effect on the Pilot:
+
+| | `v3` (no shelf) | `v4` (+shelf) | Diff |
+|---|---|---|---|
+| `h_star` | 1270dbar | 1280dbar | +10dbar |
+| Mean MOCup | 23.97 Sv | 19.53 Sv | **-4.44 Sv** |
+| Std | 7.61 Sv | 7.67 Sv | ~unchanged |
+
+**Nearly a pure constant offset**: day-to-day shift has mean -4.44 Sv but std only 0.069 Sv -- essentially the entire West shelf magnitude (-4.51 Sv), consistent with `West_TPUD`/`East_TPUD_new` being static/time-invariant. The time-mean profile shows *why* `h_star` shifts slightly despite the offset being nearly constant overall: the shelf correction has its own vertical structure, building up from ~0 at the surface to its full -4.494 Sv value by ~1200dbar, then staying exactly flat at every depth below that (physically sensible -- shelf/boundary transport is an upper-ocean phenomenon, no deep-reaching structure) -- so it's not *perfectly* uniform in the 0-1200dbar range specifically, which is enough to nudge where the cumulative profile peaks.
+
+**Conclusion**: the shelf correction affects the Pilot the same systematic way it affects the full array -- a near-constant shift of magnitude matching the total shelf transport, no meaningful extra noise introduced. Expected and consistent, not a new concern.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
