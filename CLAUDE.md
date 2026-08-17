@@ -545,6 +545,33 @@ yg=y*g;                                      % <- final output
 
 **Broader implication, NOT YET SCOPED**: `lowpass_filter(x,45)` is the standard smoothing convention used throughout this entire project -- `mov`, `Heat_total`/`Q_*`, and every MOC index reported in `CLAUDE.md` and in conversation this whole session used `nanmean(lowpass_filter(x,45))` (or an equivalent per-depth-level lowpass) as "the" reported mean. Every one of those means may carry a similar multiplicative inflation, proportional to how much variance-restoration gain (`g1*g2`) that specific signal happened to need -- the exact gain will differ per-signal (depends on how "peaky"/high-frequency the underlying daily series is relative to its 45-day-smoothed envelope), so this is NOT a single fixed correction factor across all reported numbers. **User's decision (2026-08-17): document this now, scope/re-audit which specific previously-reported means are affected in a later session** -- `lowpass_filter.m` itself has not been modified (shared utility outside both repos, in `~/matlab/stat/` -- same location as the earlier `sinfitb_tot.m` ill-conditioning fix, see `reference_sinfitb_tot_fix` memory). No fix applied yet; this section exists to make sure the finding isn't lost before the fuller audit happens.
 
+## Scoping the lowpass bias within the MOC calculation, and reconstructing Kersalé et al. (2021) Figure 5a/5b (2026-08-17)
+
+Two follow-ups to the finding above, both requested together: (1) scope the bias specifically for MOC before touching Mov/MHT, (2) reconstruct the paper's Figure 5 (temporal anomaly of MOCup, both configurations).
+
+**`lowpass_filter_fixed.m`** (new, in `MOV_Project`, NOT touching the shared `~/matlab/stat/lowpass_filter.m`): identical to the original except it stops after the Blackman-window convolution + edge correction, omitting the two buggy amplitude-rescaling steps. Confirmed mean-preserving on its own.
+
+**Scope for MOC, comparing raw / biased-lowpass / fixed-lowpass means**:
+
+| | Raw | Biased (`lowpass_filter`) | Fixed (`lowpass_filter_fixed`) |
+|---|---|---|---|
+| Full array, full record (2013-2022) | 12.35 Sv | 12.97 Sv | 12.36 Sv |
+| Pilot, full record | 19.19 Sv | 19.53 Sv | 19.19 Sv |
+| Full array, 2013-2017 only | 20.11 Sv | 21.08 Sv | 20.08 Sv |
+| Pilot, 2013-2017 only (paper: 17.7 Sv) | 18.77 Sv | 19.10 Sv | **18.76 Sv** |
+
+**Correlation is unaffected** (0.135 full record, 0.514 for 2013-2017, identical whether biased or fixed filter is used) -- expected, since the bias is a pure multiplicative scalar applied uniformly to the whole signal, which cancels out of a correlation coefficient by construction. Confirms the bias only ever distorted *means*, never the *shape/timing* of variability already investigated in the gap-subset tests above.
+
+**This meaningfully revises the earlier "Marion-original-vs-published, ~1.1 Sv unexplained" reading**: that number came from `nanmean(lowpass_filter(...))` too. Using the raw/unbiased mean instead (already computed in the previous section): 17.70 Sv vs. the paper's 17.3 Sv -- only ~0.4 Sv apart, not ~1.1 Sv. **Most of what looked like an unexplained baseline gap was actually this same lowpass bug**, not a separate mystery. The remaining, still-real, still-unexplained pieces are: (a) the West GEM-vintage/Brazil-Current effect (this repo's own reprocessing vs. Marion's original, ~2-3 Sv, concentrated in gap A-C -- unaffected by the lowpass finding, a genuine data-provenance difference), and (b) a small ~0.4 Sv baseline residual even with fully original data and an unbiased mean.
+
+**Figure 5a/5b reconstruction** (`moc_anomaly_fig5_2013_2017.m`): temporal anomaly (each series minus its *own* 2013-2017 mean) for the full array and Pilot, using `lowpass_filter_fixed`, restricted to the paper's exact window. Sidesteps the whole absolute-level discrepancy (calibration-window/GEM-vintage/lowpass-bias) entirely -- isolates whether the two methods' *day-to-day variability* is consistent, which is what the paper's `r=0.73` actually measures.
+
+**Result**: `corr(full anomaly, pilot anomaly) = 0.514` (paper: 0.73) -- visually (`moc_anomaly_fig5_2013_2017_IES.png`), the two anomaly curves track each other reasonably well through much of the record (peaks/troughs align around mid-2015, early/mid-2016), but the full array has much larger swings (anomaly `std=11.86` Sv vs. Pilot's `7.34` Sv) and one dramatic, Pilot-unmatched dip around January 2017 (full array down to -30Sv). **Not reconstructed**: panel 5c (`MOCab`, the abyssal cell -- a separate 3150-4300dbar depth-integrated quantity not yet computed in this project) and the paper's gray "estimated daily accuracy" shading (no equivalent error-budget methodology built here).
+
+**Open question going forward**: why the correlation (0.51) still falls short of the paper's 0.73, now that the mean-level confounds are cleanly separated out -- likely candidates not yet tested: the remaining coverage-outage days even within 2013-2017 (some `n_gaps_valid<8` days exist even in this "good" window), the GEM-vintage secular drift affecting day-to-day shape (not just the mean level), or a genuine difference in how well `AREA_TOPO_pilot`'s aggregate approximation captures real day-to-day variability vs. per-gap-resolved topography.
+
+Outputs: `lowpass_filter_fixed.m`, `moc_anomaly_fig5_2013_2017_IES.png`, `moc_anomaly_fig5_2013_2017.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
