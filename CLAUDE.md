@@ -517,6 +517,34 @@ Both `h_star` values now land within 45dbar of the paper's 1315dbar (vs. 1190/12
 
 Outputs: `moc_profile_comparison_2013_2017_IES.png`, `moc_profile_comparison_2013_2017.mat`.
 
+## MAJOR FINDING: `~/matlab/stat/lowpass_filter.m` (shared utility, used throughout this project for every "45-day lowpass") does NOT preserve the mean -- confirmed root cause, 2026-08-17, project-wide implications not yet scoped
+
+While chasing the remaining ~1.1 Sv gap between Marion's TRUE ORIGINAL 2020 pipeline output (same data, same general methodology as the paper -- the most apples-to-apples comparison available) and the published 17.3 Sv, applying this repo's correct Kersalé-definition + shelf correction directly to her untouched `Full_Depth_OverturningEstimate_Cst_for_MHT_TRUEORIGINAL_backup.mat`:
+
+- **Mean of the RAW (unfiltered) daily MOCup series: 17.70 Sv** -- remarkably close to the paper's 17.3 Sv.
+- **Mean of `lowpass_filter(MOCup_raw, 45)` (this project's standard "45-day lowpass" convention, used everywhere): 18.44 Sv** -- the number previously reported as the shelf-correction validation result.
+
+**Root-caused exactly**, by replicating `lowpass_filter.m` step by step:
+
+```matlab
+function yg=lowpass_filter(var,npf);
+um=ones(size(var));
+inxs=(npf-1)/2;
+myfilter=blackman(npf); myfilter=myfilter/sum(myfilter);
+y=conv(var,myfilter); umf=conv(um,myfilter);
+y=y(inxs+1:length(y)-inxs); umf=umf(inxs+1:length(umf)-inxs);
+y=y./umf;                                    % <- proper, edge-corrected, MEAN-PRESERVING lowpass ends here
+y=y*maxvar(var,y);                           % <- rescale #1: multiplies by a no-intercept regression gain
+g=(y(:)'*y(:))\(y(:)'*var(:));               % <- rescale #2: another no-intercept regression gain
+yg=y*g;                                      % <- final output
+```
+
+(`maxvar.m`: `g=(b(:)'*b(:))\(b(:)'*a(:));` -- "maximizes the amplitude of b in relation to a by least-squares fit.") The actual filtering (Blackman-window convolution + edge correction, ending at the `y=y./umf` line) is correctly mean-preserving on its own -- confirmed directly: mean after that step = 17.7001 Sv, matching the raw mean (17.7008) almost exactly. **The entire bias comes from the two subsequent amplitude-rescaling steps**, intended to "restore variance lost to smoothing" (a real, legitimate concern -- lowpass filtering does reduce a signal's variance) but implemented as a single **scalar multiplicative gain applied to the whole signal** -- which inflates the mean/DC component by the same factor as the AC/variance component, even though the mean needed no correction at all. Measured gain for this dataset: `g1=1.041878`, `g2≈1.000000` (the second pass is nearly a no-op once the first has already best-fit the scale) -- combined gain 1.0419, and `raw_mean * 1.0419 = 18.4421` Sv, matching the actual `lowpass_filter` output (18.4413 Sv) almost exactly. **Confirms the mechanism completely**, not just a suspicious coincidence.
+
+**Implication -- likely explains a real chunk of the "unexplained" MOC residual**: since 17.70 Sv (unfiltered mean) is far closer to the paper's 17.3 Sv than 18.44 Sv (this project's usual lowpass-mean convention), it's plausible the paper's own reported statistics come from a mean of the raw/daily series (or an unbiased smoothing method), not something equivalent to this project's `lowpass_filter`-then-mean convention.
+
+**Broader implication, NOT YET SCOPED**: `lowpass_filter(x,45)` is the standard smoothing convention used throughout this entire project -- `mov`, `Heat_total`/`Q_*`, and every MOC index reported in `CLAUDE.md` and in conversation this whole session used `nanmean(lowpass_filter(x,45))` (or an equivalent per-depth-level lowpass) as "the" reported mean. Every one of those means may carry a similar multiplicative inflation, proportional to how much variance-restoration gain (`g1*g2`) that specific signal happened to need -- the exact gain will differ per-signal (depends on how "peaky"/high-frequency the underlying daily series is relative to its 45-day-smoothed envelope), so this is NOT a single fixed correction factor across all reported numbers. **User's decision (2026-08-17): document this now, scope/re-audit which specific previously-reported means are affected in a later session** -- `lowpass_filter.m` itself has not been modified (shared utility outside both repos, in `~/matlab/stat/` -- same location as the earlier `sinfitb_tot.m` ill-conditioning fix, see `reference_sinfitb_tot_fix` memory). No fix applied yet; this section exists to make sure the finding isn't lost before the fuller audit happens.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
