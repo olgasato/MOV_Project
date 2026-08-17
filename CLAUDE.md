@@ -652,6 +652,18 @@ Follow-up to "does the raw `tau1000` data itself show anything strange during 20
 
 Outputs: `moc_components_2017_2019.m`, `moc_components_2017_2019_zoom.png`, `moc_components_full_record.png`, `moc_components_2017_2019.mat`.
 
+## Is the full-array-vs-Pilot correlation shortfall a phase/lag issue? `moc_lag_analysis_2013_2017.m` (2026-08-17)
+
+User's direct observation: in Kersalé et al. (2021)'s Figure 5, the pilot and full-array anomaly curves look in-phase; in this repo's `moc_anomaly_fig5_2013_2017_IES.png` reconstruction, they visibly look out of phase in places (e.g. early 2014, early 2015).
+
+**Time-varying lag on the 45-day-lowpass series** (6-month sliding window, ±30-day search): NOT a constant offset. Alternates between windows of near-zero lag with high correlation (Jul2015-Jan2016, Nov2016-Mar2017: `r=0.7-0.94`, matching or beating the paper's 0.73) and windows of unstable, large apparent lag with weak correlation. Extending the search to ±90 days destabilizes most of the "large lag" windows (several flip sign/magnitude entirely, e.g. Oct/Nov-14 goes from +30 to -72) -- a sign the lag estimate is unreliable there (tested lag becomes too large a fraction of the 180-day window for a robust estimate), not evidence of a genuine, larger phase shift.
+
+**Same test on RAW (unfiltered) daily data -- the actual answer to the user's follow-up question ("if we skip the 45-day filter, are the curves more in phase?")**: **yes, clearly.** Whole-record best lag on raw data = **0 days** (already optimal -- no lag improves the raw correlation at all, `r=0.485`). The time-varying version is lag=0 in 76% of windows (vs. only 17% for the lowpass version) -- and the rare non-zero-lag raw windows land exactly on the same windows that also have near-zero raw correlation (Sep-Nov 2014), i.e. noise rather than a real, determinable lag there either.
+
+**Conclusion**: the apparent phase offset visible in the lowpass-filtered anomaly plot is an **artifact of the 45-day lowpass filter itself** (smoothing broadens and can shift the apparent location of peaks/troughs), not a real property of the underlying daily data -- without the filter, the two methods are essentially in phase throughout. This means the remaining correlation shortfall (raw `r=0.485` vs. the paper's `0.73`) is *not* a phase/timing problem -- it's specifically about how well the *amplitude/shape* of fluctuations match during certain weaker windows (which, per the earlier `tau1000` noise findings, may trace back to sites A and P1's individually elevated raw measurement noise). Next natural step (not yet done): check whether the weak-correlation windows found here line up with the noisiest stretches of `tau1000_A`/`tau1000_P1`.
+
+Outputs: `moc_lag_analysis_2013_2017.m`, `moc_lag_analysis_2013_2017_IES.png`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
