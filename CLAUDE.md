@@ -406,12 +406,29 @@ Linear trend over the 1405-day window: A drifts +0.31°C, C drifts -0.42°C from
 ### Does this also affect 2018-2022? Investigated 2026-08-17, inconclusive -- documented as an open limitation
 
 Extended the same site A/C discrepancy check through the *full* old/new source overlap (2009-03-18 to 2018-04-30 -- the original West source, `IES_Make_Profiles_USA_SAM.mat`, actually runs to April 2018, not just to the paper's 2017-07-17 cutoff). Found **two overlaid effects**, not one:
-1. **A stable seasonal cycle present from 2009 onward** (dA oscillates roughly 0.35-0.47°C mid-year vs. 0.72-1.08°C in Q1/Q2, every year, including years well before 2018) -- likely a genuine methodology difference in seasonal correction between the two pipelines (the original has an explicit `do_SeasCorr_temper_field_west.m` step; unclear if/how `samba_w.mat`'s build handles this), not a training-window artifact.
+1. **A stable seasonal cycle present from 2009 onward** (dA oscillates roughly 0.35-0.47°C mid-year vs. 0.72-1.08°C in Q1/Q2, every year, including years well before 2018) -- **confirmed below** to be a genuine methodology difference in seasonal correction between the two pipelines, not a training-window artifact.
 2. **A secular drift that clearly accelerates from ~2013 onward and is still growing, not leveling off, at the last available comparison point (April 2018)** -- same-quarter comparisons: dA~0.37-0.46°C (2009-2012) → ~0.72-0.87°C (2013-2016) → ~1.03-1.14°C (2017-2018); dC shows an even sharper jump, from small positive values pre-2017 to consistently around -0.60 to -0.65°C by 2017-2018. Critically, this is **still accelerating right at the edge of available data**, giving no reassurance that it plateaus once "inside" the retrained table's own training window.
 
 **Searched this machine thoroughly for independent (non-GEM-derived) CTD/Argo data to check 2018-2022 directly and found none usable**: confirmed the original West Argo training file (`gem/west/DATA/Reformat_Argo_HydroData_forGEM_fullres.mat`) covers exactly 2003-2018 (verified via the embedded year column, not just file dates) in the right region (lon -55 to -40, lat -38 to -32, covering A/C). Files that looked promising by name (`DATA/CTD/ctd_2019.mat`, `ctd_new.mat`) turned out to be **East array** servicing-cruise CTDs (`headerE`/`hydroE` variables), not West/Brazil-side casts. No West-side CTD or Argo collection extending past 2018 exists anywhere in either repo or the broader `~/research/sambar/` tree.
 
 **Decision (user, 2026-08-17): document this as a known, open limitation rather than pursue further right now** (options considered: fetch live Argo profiles from an external database, or ask the collaborator who built `samba_w.mat` about the GEM table's exact training window/validation). **Conclusion to carry forward**: whether the A/C secular drift continues, plateaus, or reverses somewhere within 2018-2022 is **unverified** with data currently available in this project -- treat any MOC/Mov/MHT results for 2018-2022 with the same caution already established for 2013-2017's A-C-driven bias, and revisit if/when independent West-side hydrography for that period becomes available.
+
+### The seasonal component, explained (2026-08-17): `samba_w.mat` very likely includes a seasonal correction the current MOC pipeline's old source lacks
+
+Checked whether `IES_Make_Profiles_USA_SAM.m` (the script the *original*, non-extended Step E pipeline actually uses for the West source) applies any seasonal correction at all: it does not (`grep -i seascorr` on the script returns nothing). The seasonal correction is a **separate product**, only produced by the `_inclSeasGEM` variant script (`IES_Make_Profiles_USA_SAM_inclSeasGEM.m`), which is used elsewhere in this repo for MHT but **not** for the MOC/Step E pipeline. So the plain West source feeding Step E's `Total_TPUD` (and by extension `moc_streamfunction_v3.m`) is NOT seasonally corrected.
+
+Tested directly whether `samba_w.mat` behaves as if it *does* include an equivalent correction: extracted the original pipeline's own seasonal-correction field (`gem/west/Wrk/seasCorr_temper_field_west.mat`, `SC_SMF_temperature` vs. `SCpresrange`/yearday, valid 0-300dbar only, built by `do_SeasCorr_temper_field_west.m` from the same 2003-2018 CTD/Argo training set) at 50dbar, and compared its shape (as a function of day-of-year) against the (`samba_w.mat` minus `IES_Make_Profiles_USA_SAM.mat`) discrepancy's own day-of-year climatology at site A, 50dbar, over the full 2009-2018 overlap:
+
+| Yearday | Original seasonal-correction field | dA climatology |
+|---|---|---|
+| 1 | +0.30 | +0.40 |
+| 61 (peak) | +1.86 | +0.50 |
+| 241 (trough) | -1.66 | +0.08 |
+| 361 | +0.12 | +0.40 |
+
+**Correlation between the two shapes (both demeaned): r = 0.971** -- a near-perfect phase match, even though the original correction field's amplitude (peak-to-peak 3.64°C) is much larger than the observed discrepancy's (peak-to-peak 0.46°C, likely because the discrepancy also mixes in the unrelated secular-drift component documented above, and/or `samba_w.mat`'s own seasonal correction uses different vintage data or smoothing). This phase match is strong evidence that **`samba_w.mat`'s build applies a seasonal correction (or a very similar one) that the current MOC pipeline's plain West source does not** -- i.e. `samba_w.mat` is very likely the *more complete* product here (seasonal correction is a real, physically-motivated refinement -- the paper's own methodology treats it as standard practice for the upper 300dbar), not a bug or an inconsistency to fix.
+
+**Net read on the two effects together**: the seasonal component of the A/C discrepancy (this section) is benign and expected -- an improvement in `samba_w.mat`, not a concern. The secular-drift component (previous section) remains a real, unresolved, non-concomitant-training-data concern, unaffected by this finding -- the two are independent and should not be conflated when interpreting the residual MOC gap.
 
 ## Outputs
 
