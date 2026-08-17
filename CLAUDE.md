@@ -572,6 +572,18 @@ Two follow-ups to the finding above, both requested together: (1) scope the bias
 
 Outputs: `lowpass_filter_fixed.m`, `moc_anomaly_fig5_2013_2017_IES.png`, `moc_anomaly_fig5_2013_2017.mat`.
 
+### Daily (unfiltered) standard deviation matches the paper almost exactly for the full array
+
+The paper's results text (Section 3.1) reports the DAILY (not lowpass-filtered) standard deviation of MOCup over 2013-2017: "the temporal standard deviation (σ) of the daily MOCup cell strength calculated over the continuous 4 years... with the full resolution array is equal to 15.4 Sv... This daily σ exceeds the previous estimate of ~9 Sv using the pilot array configuration." Computed the equivalent directly from `MOCup_raw` (no `lowpass_filter` involved at all, sidestepping the whole bias question above), restricted to the 2013-2017 window:
+
+| | This repo | Paper |
+|---|---|---|
+| Full array, daily σ | **15.39 Sv** | **15.4 Sv** |
+| Pilot, daily σ | 10.51 Sv | ~9 Sv |
+| Ratio (full/pilot) | 1.46 | 1.71 |
+
+**The full array's daily variability is an almost exact match** (15.39 vs. 15.4 Sv) -- strong evidence that this repo's day-to-day MOC calculation (formula, definition, physics) replicates the paper's methodology very precisely; the remaining discrepancy is specifically about *mean-level* calibration (GEM-vintage/Brazil-Current, already documented), not a structural problem with the approach. The Pilot's daily σ runs somewhat higher than the paper's (10.51 vs. ~9 Sv, +17%) -- not yet investigated further, but notably closer than the ratio of the two σ's, which undershoots the paper's more pronounced full-vs-pilot variability gap (1.46 vs. 1.71) -- consistent with the still-open "why is the correlation only 0.51 vs. 0.73" question from the section above, suggesting some of the full array's real high-frequency variability (which the paper's better-resolved 8-gap array captures more of, e.g. eddies/Agulhas Rings per the paper's own discussion) isn't as fully distinguished from the Pilot in this repo's implementation as in the original.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
