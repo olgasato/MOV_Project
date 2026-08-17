@@ -449,6 +449,23 @@ User asked directly whether the deep dip in the full-array MOCup curve (down tow
 
 **Conclusion: both ruled out.** The dip remains fully explained by the sampling/representativeness mechanism already documented -- losing ~78% of the section's nominal width leaves only a narrow ~21% sliver (gaps 1,2,7,8) which, regardless of how good ITS OWN data quality is, cannot represent the true basin-wide overturning. Not a data-quality artifact in BPR or a topographic-correction artifact in `AREA_TOPO`.
 
+## Testing whether a fixed reduced-gap subset explains the dip, treating the Pilot as approximate ground truth (2026-08-17)
+
+User's test design: since the Pilot (A-P1 only) never suffers the intermediate-site outages, treat it as approximate ground truth. If the full array is restricted to *only* the gaps/sites that have data during the 2017-2019 outage -- applied as a FIXED subset across the *entire* 2013-2022 record, not just during the outage -- and it still deviates from the Pilot outside that window too, that would mean the deviation isn't purely "too few gaps = unrepresentative", but something more general about using those particular gaps. If it tracks the Pilot fine outside the window, that supports the sampling/representativeness explanation specifically.
+
+**First checked exactly which sites have data during 2017-08-01/2020-01-01** (per-site, not per-gap, to avoid conflating two sites' coverage): A 100%, C 100%, D 76.6%, P8 34.0%, P4 70.4%, P2 100%, P1 100% -- **only P5 and P6 are completely (0%) absent** throughout the window.
+
+**Test 1 (`moc_streamfunction_test_no_P5P6.m`)**: restricted the full-array calculation to gaps 1,2,3,7,8 (A-C, C-D, D-P8, P4-P2, P2-P1 -- i.e. drop only 4,5,6, which all require P5 and/or P6) for every single day of the whole 2013-2022 record, and compared against the Pilot (`moc_pilot_v5.m`):
+
+| | Full (5-gap restricted) | Pilot | corr |
+|---|---|---|---|
+| Outside 2017-2019 | 16.79 Sv | 18.53 Sv | 0.266 |
+| Inside 2017-2019 | **-2.70 Sv** | 22.39 Sv | 0.059 |
+
+**Result confirms the hypothesis, with a nuance.** Outside the outage window, the 5-gap-restricted full array's *mean* tracks the Pilot reasonably well (16.8 vs 18.5 Sv) -- consistent with "fewer gaps, when they all have data, still gives a roughly representative estimate." But its *variability* is much larger than the Pilot's (`std=21.3` Sv vs. `7.7` Sv) -- fewer gaps means more exposure to local/mesoscale noise not averaged out by having more independent measurements, a real but distinct effect from bias. Inside the outage window, the mean collapses to -2.70 Sv even though gaps 1,2,3,7,8 are nominally "included" -- because those same gaps are themselves only *partially* covered during 2017-2019 (D 76.6%, P8 34.0%, P4 70.4%, none at 100%), compounding on top of losing gaps 4-6 entirely. **So it's not simply "5 gaps vs. 8 gaps" -- it's the combination of losing 3 gaps outright AND partial coverage within the remaining 5 that produces the severe, biased dip, not just noise from having fewer gaps.**
+
+Outputs: `moc_test_no_P5P6_vs_pilot.png`, `moc_test_no_P5P6.mat` (test script, `moc_streamfunction_test_no_P5P6.m`, kept for reference -- not a "vN" of the main line, a diagnostic).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
