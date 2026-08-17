@@ -594,6 +594,30 @@ Three candidate explanations tested directly:
 
 **Before investigating further, stepping back to look at the raw `tau1000` data directly across all 9 sites** (A through P1) -- see next section.
 
+### Looking at raw τ1000 directly: sites A and P1 (both used by the Pilot) are among the noisiest of the 9 -- likely explains the excess Pilot noise (2026-08-17)
+
+Plotted raw `tau1000` (the fundamental PIES/CPIES acoustic travel-time measurement -- everything downstream, GEM-derived T/S, `Gpan`, BPR-referenced transport, is built on top of this) for all 9 sites, west-to-east, over the 2013-2017 window (`check_raw_tau1000_all_sites.m` → `raw_tau1000_all_sites_2013_2017.png`). Visually, the West sites (A, C, D) look noticeably more scattered/jagged point-to-point than most East sites (P8, P6, P5, P4, P2, P1) -- consistent with the already-documented fact that the East `Daily_Tau` source is pre-filtered (de-tided/de-drifted/de-spiked, 72h lowpass) while `samba_w.mat`'s West provenance doesn't carry the same documented treatment.
+
+**Quantified directly** (`check_tau_noise.m`): day-to-day noise (`std(diff(tau1000))`) and a noise-to-signal ratio (`std(diff)/std(raw)`) per site, 2013-2017:
+
+| Site | std(diff) | noise/signal (×1000) |
+|---|---|---|
+| A | 0.00082 | 271 |
+| C | 0.00083 | 153 |
+| D | 0.00084 | 248 |
+| P8 | **0.00029** (smoothest overall) | 134 |
+| P6 | 0.00051 | 162 |
+| P5 | 0.00054 | 149 |
+| P4 | 0.00082 (as noisy as West!) | 179 |
+| P2 | 0.00063 | 325 |
+| **P1** | 0.00052 | **315** (2nd highest) |
+
+**Not a clean West-vs-East split** (P4 is as noisy as A/C/D in absolute terms) -- but directly relevant to the Pilot specifically: **A is tied for the noisiest site in absolute terms, and P1 has the 2nd-highest noise-to-signal ratio of all 9 sites.** Since the Pilot depends *entirely* on A and P1 (50% weight each, no other sites), both endpoints' elevated noise characteristics enter the calculation essentially undiluted. The full array, by contrast, averages across 8 gaps built from all 9 sites -- including P8 (the smoothest site by a wide margin) and several other lower-noise East sites -- naturally diluting any single site's noise contribution. **This is a well-supported, data-grounded explanation for both the Pilot's elevated daily σ (10.51 vs. the paper's ~9 Sv) and the correlation shortfall (0.51 vs. 0.73)** -- not a processing bug, but a real consequence of the Pilot method's inherent sensitivity to its two endpoint sites' individual data quality, which happen to include two relatively noisy measurements at 34.5°S specifically.
+
+**Not yet resolved/quantified further**: whether this noise is itself instrumental (sensor/calibration precision differences between deployments) or partly real high-frequency oceanographic signal (e.g., local coastal-boundary variability at A and P1 specifically, both being edge/shelf-adjacent sites) that a 2-point method is simply more exposed to than an 8-gap spatial average. Distinguishing these would need either an independent noise-floor estimate per site (e.g., from published PIES instrument specs) or checking whether the "excess" noise at A/P1 has a spectral signature more consistent with sensor noise (white/high-frequency) or ocean variability (red/mesoscale).
+
+Outputs: `check_raw_tau1000_all_sites.m`, `raw_tau1000_all_sites_2013_2017.png`, `check_tau_noise.m` (table reproduced above; script prints, doesn't save a `.mat`/figure).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
