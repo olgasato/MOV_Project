@@ -618,7 +618,25 @@ Plotted raw `tau1000` (the fundamental PIES/CPIES acoustic travel-time measureme
 
 Outputs: `check_raw_tau1000_all_sites.m`, `raw_tau1000_all_sites_2013_2017.png`, `check_tau_noise.m` (table reproduced above; script prints, doesn't save a `.mat`/figure).
 
-**Extended to the full 2013-2022 record** (`check_raw_tau1000_all_sites_full.m` → `raw_tau1000_all_sites_2013_2022.png`), explicitly regridded onto a complete daily calendar axis (missing days set to `NaN` rather than letting the plot bridge across them, which would otherwise hide real gaps by connecting the nearest surrounding valid points). Visually confirms the already-documented coverage history cleanly: **P5 and P6** share one long simultaneous outage from roughly mid-2017 to late 2021; **P8** has a gap around 2018-2019; **D** has a shorter gap around 2018; **P4** has a shorter gap around 2019; **A, C, P2, P1** run continuously with no visible gaps the entire record. One thing noted but not yet investigated: site **A** shows two sharp, isolated downward spikes standing out from the surrounding signal -- one around 2021, one near the very end of the record (2022) -- flagged for possible future follow-up, not chased further here per the user's request to document as-is.
+**Extended to the full 2013-2022 record** (`check_raw_tau1000_all_sites_full.m` → `raw_tau1000_all_sites_2013_2022.png`), explicitly regridded onto a complete daily calendar axis (missing days set to `NaN` rather than letting the plot bridge across them, which would otherwise hide real gaps by connecting the nearest surrounding valid points). Visually confirms the already-documented coverage history cleanly: **P5 and P6** share one long simultaneous outage from roughly mid-2017 to late 2021; **P8** has a gap around 2018-2019; **D** has a shorter gap around 2018; **P4** has a shorter gap around 2019; **A, C, P2, P1** run continuously with no visible gaps the entire record. One thing noted: site **A** shows sharp, isolated downward spikes standing out from the surrounding signal -- investigated directly below.
+
+### Site A's spikes: two are likely instrument glitches (not yet fixed), one is real ocean signal -- ⚠️ revisit tau processing with GEM later
+
+Outlier-detected directly on `tau1000_A` (residual from a 31-day running median, 6σ threshold, `threshold=0.01116`):
+
+| Date | `tau1000_A` | Residual |
+|---|---|---|
+| 2020-06-20 | 1.30906 | -0.0160 |
+| 2022-10-17 | 1.30692 | -0.0189 |
+| 2022-10-18 | 1.30838 | -0.0181 |
+
+**These three points have the classic signature of an instrument glitch**: sharp, isolated, single/double-day V-shaped drops and immediate recovery, magnitude (~0.016-0.019s) roughly **20-25x** the typical day-to-day noise level already quantified for site A (`std(diff)≈0.0008s`, see the raw-`tau1000` noise section above) -- structurally the same *kind* of problem as the East `-9999` sentinel bug found and fixed earlier in this project (`SAMBA_E_IES`'s `read_daily_tau.m`), just not yet root-caused or fixed for this West source.
+
+**By contrast, the dip visually noticed around late May/early June 2021 is NOT a glitch** -- checking the surrounding week shows a smooth ~10-day gradual descent and recovery (26-May to 5-Jun-2021), well below the 6σ outlier threshold -- consistent with real oceanographic variability (e.g., a mesoscale/submesoscale event), not an instrument artifact.
+
+**Reinforces the earlier documented suspicion**: the East `Daily_Tau` dataset is explicitly documented as pre-processed ("de-tided/de-drifted/de-spiked," 72h lowpass) before this project ever sees it, while `samba_w.mat`'s West provenance has no equivalent documented QC step -- these three spurious, unfiltered points in `tau1000_A` are direct, concrete evidence supporting that asymmetry, not just an inference from noise-level statistics.
+
+**⚠️ Not yet fixed -- explicit reminder for a later session**: the user wants to revisit the West τ processing pipeline using GEM (likely: apply a GEM-consistency-based de-spiking/QC step to `tau1000` before profile generation, analogous to what the published East `Daily_Tau` dataset already received, rather than a simple outlier-clipping fix applied after the fact). Not scoped further this session -- flagged here and in project memory so it isn't lost.
 
 ## Outputs
 
