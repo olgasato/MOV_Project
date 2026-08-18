@@ -725,10 +725,34 @@ Recomputed `Gpan` for all 9 sites directly from `concat_IESsamba.mat`'s per-site
 
 Outputs: `moc_gpan_noise_test.m`, `moc_gpan_noise_test_IES.png`, `moc_gpan_noise_test.mat`.
 
+## Cross-spectral coherence, full array vs. Pilot: `moc_coherence_test.m` (2026-08-18) — weak, broadband decorrelation, not concentrated in a specific frequency band
+
+Follow-up to the Gpan noise test above, to distinguish two competing explanations for the correlation shortfall: (a) **broadband instrumental/measurement noise** at sites A/P1, which would show up as weak coherence smeared across most of the spectrum (and could in principle be reduced by smoothing/de-spiking), vs. (b) a **specific-band physical difference** — the paper's own explanation for the full array's larger overall variance is that it resolves eddies/Agulhas Rings that a 2-point Pilot structurally cannot see, which would predict strong coherence everywhere *except* that particular mesoscale band (not fixable by better processing, an inherent limitation of only having 2 sites).
+
+Computed magnitude-squared coherence (`mscohere`) and cross-spectral phase (`cpsd`) between the RAW daily full-array and Pilot MOCup anomalies (reusing `moc_anomaly_fig5_raw_2013_2017.mat`'s `full_anom`/`pilot_anom` directly — no NaNs, perfectly regular daily sampling, 1405 days), Welch-averaged with a 256-day Hamming window / 128-day overlap (9 segments, 95% significance threshold = 0.312 by the standard nd-segment formula). Also computed each series' own variance-preserving power spectrum (`pwelch`) to see where each one's variance is concentrated.
+
+**Band-averaged coherence**:
+
+| Band | Mean Cxy | 95% threshold |
+|---|---|---|
+| Long (>100d, 2 freq bins) | 0.368 | 0.312 |
+| Medium (20-100d, 10 bins) | 0.375 | 0.312 |
+| Short (2-20d, 116 bins) | 0.258 | 0.312 |
+
+**Result: coherence is weak and mostly non-significant across essentially the whole spectrum**, oscillating above and below the 0.312 threshold almost continuously from ~150 days down to ~3 days, not settling into a clean "high here, low there" pattern. Only the very shortest resolvable periods (2-4 days, near the Nyquist limit) show sustained excursions up to 0.6-0.78 — treated with caution, since that end of the spectrum has the fewest effective degrees of freedom and the noisiest coherence estimates.
+
+**Two supporting findings, both consistent with earlier work**:
+1. **Phase lag is ~0 days across almost the entire resolvable spectrum** (only the lowest 1-2 frequency bins, essentially unresolved with 9 segments, show a large but unreliable apparent lag) — an independent, frequency-domain confirmation of `moc_lag_analysis_2013_2017.m`'s time-domain finding (raw whole-record best lag = 0 days).
+2. **The power spectra show the full array carrying more variance than the Pilot specifically in the 20-150 day band** — matching the paper's own attribution of its larger variance to eddies/Agulhas Rings — but the two spectra converge in both magnitude and (already-shown) coherence at periods shorter than ~10 days.
+
+**Interpretation**: if the shortfall were purely the "Pilot can't see mesoscale eddies" effect the paper describes, coherence should be strong everywhere *except* the 20-150 day band. Instead coherence is weak nearly everywhere, including well outside that band — more consistent with the Gpan-noise finding above (broadband, site-level measurement noise at A/P1 diluting agreement at essentially every timescale) than with a single specific-band physical limitation. This doesn't rule out the eddy-resolution effect entirely (the power-spectrum asymmetry in 20-150 days is real and expected) — but it's not the dominant, uniquely-identifiable driver of the coherence/correlation shortfall on its own.
+
+Outputs: `moc_coherence_test.m`, `moc_coherence_test_IES.png`, `moc_coherence_test.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
 - `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat`, `moc_pilot_v2.mat`, `moc_streamfunction_v2.mat`, `moc_pilot_v3.mat`, `moc_streamfunction_v3.mat`, `moc_pilot_v4.mat`, `moc_streamfunction_v4.mat`, `moc_pilot_v5.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png`, `moc_pilot_v2_vs_full_IES.png`, `moc_pilot_v2_profile_comparison_IES.png`, `moc_streamfunction_v2_hovmoller.png`, `moc_streamfunction_v2_mean_profile.png`, `moc_streamfunction_v2_index_IES.png`, `moc_pilot_v3_vs_full_IES.png`, `moc_pilot_v3_profile_comparison_IES.png`, `moc_streamfunction_v3_hovmoller.png`, `moc_streamfunction_v3_index_IES.png`, `moc_streamfunction_v3_mean_profile.png`, `moc_pilot_v4_vs_full_IES.png`, `moc_pilot_v4_profile_comparison_IES.png`, `moc_streamfunction_v4_hovmoller.png`, `moc_streamfunction_v4_index_IES.png`, `moc_streamfunction_v4_mean_profile.png`, `moc_pilot_v5_vs_full_IES.png`, `moc_pilot_v5_profile_comparison_IES.png` — committed (not gitignored). **`moc_streamfunction_v4.m`/`moc_pilot_v5.m` are the current, most-correct MOC scripts (paper-correct definition + shelf transport + calibration-window fix) — prefer these over earlier versions going forward.**
-- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png` — committed (not gitignored).
+- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat`, `moc_coherence_test.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png`, `moc_coherence_test_IES.png` — committed (not gitignored).
