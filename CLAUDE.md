@@ -703,10 +703,32 @@ Both go through the same Kersalé-definition streamfunction (own time-mean `h_st
 
 Outputs: `moc_pilot_component_test.m`, `moc_pilot_component_test_IES.png`.
 
+## Investigating Gpan_A/Gpan_P1 directly: `moc_gpan_noise_test.m` (2026-08-18) — confirms the noise excess propagates from raw τ1000 through the GEM step into the actual baroclinic transport signal
+
+Direct follow-up to the BPR-vs-baroclinic component test (BPR ruled out as the noise source) and the earlier raw-`tau1000` finding (sites A and P1 are among the 9 sites' noisiest, A tied-highest in absolute terms, P1 2nd-highest noise-to-signal ratio) — that finding was on the raw acoustic travel time, one step removed from the actual transport calculation. Tested directly on `Gpan` (the GEM-derived geopotential anomaly that `RelTPUD_pilot`/each gap's `RelTPUD_i` are built from) whether the same excess noise survives the GEM lookup-table conversion into the real baroclinic signal, or gets smoothed away by it.
+
+Recomputed `Gpan` for all 9 sites directly from `concat_IESsamba.mat`'s per-site T/S (same `sw_gpan(...)` call as `moc_pilot_v5.m`/`mov_samba_marion*.m`), restricted to the paper's 2013-2017 window. For each of the full array's 8 gaps (A-C, C-D, D-P8, P8-P6, P6-P5, P5-P4, P4-P2, P2-P1) and the Pilot's own A-to-P1 span, built the depth-integral of `(Gpan_east-Gpan_west)` from the surface down to `h_star_pilot=1280dbar` (a proxy for `RelTPUD`'s own cumsum contribution to `MOCup`, without the `1/f` scaling, BPR reference, `AREA_TOPO`, Ekman, or shelf steps — isolating the pure baroclinic/Gpan signal, consistent with the component test above already showing baroclinic-only is the noisier piece), then computed each span's day-to-day noise/signal ratio (`std(diff(signal))/std(signal)`):
+
+| Span | noise/signal (×1000) |
+|---|---|
+| A-C | 191.5 |
+| C-D | 172.9 |
+| D-P8 | 179.1 |
+| P8-P6 | 153.7 |
+| P6-P5 | 126.3 |
+| P5-P4 | 158.4 |
+| P4-P2 | 178.1 |
+| P2-P1 | **350.4** (noisiest of all 9 spans) |
+| **A-P1 (Pilot)** | **273.9** (2nd noisiest) |
+
+**Confirms the mechanism directly on the transport-relevant quantity, not just the raw proxy**: mean across the 8 individual gaps = 188.8; the Pilot's A-P1 span (273.9) sits well above that average, and only P2-P1 — the short East gap that also uses site P1 — is noisier. This is the first test performed directly on `Gpan` rather than `tau1000`, and it shows the GEM lookup-table step does **not** damp the excess site-level noise already found in the raw measurement — it passes through essentially intact into the actual baroclinic signal that drives `MOCup`. Reinforces (with the real quantity, not a proxy) the standing explanation for the Pilot's elevated variance and correlation shortfall: the two-endpoint method has no spatial averaging to dilute a single noisy site's contribution, unlike the full array's 8-gap average, and P1 in particular (implicated in both the noisiest individual gap, P2-P1, and the 2nd-noisiest overall span, A-P1) is the main driver.
+
+Outputs: `moc_gpan_noise_test.m`, `moc_gpan_noise_test_IES.png`, `moc_gpan_noise_test.mat`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
 - `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat`, `moc_pilot_v2.mat`, `moc_streamfunction_v2.mat`, `moc_pilot_v3.mat`, `moc_streamfunction_v3.mat`, `moc_pilot_v4.mat`, `moc_streamfunction_v4.mat`, `moc_pilot_v5.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png`, `moc_pilot_v2_vs_full_IES.png`, `moc_pilot_v2_profile_comparison_IES.png`, `moc_streamfunction_v2_hovmoller.png`, `moc_streamfunction_v2_mean_profile.png`, `moc_streamfunction_v2_index_IES.png`, `moc_pilot_v3_vs_full_IES.png`, `moc_pilot_v3_profile_comparison_IES.png`, `moc_streamfunction_v3_hovmoller.png`, `moc_streamfunction_v3_index_IES.png`, `moc_streamfunction_v3_mean_profile.png`, `moc_pilot_v4_vs_full_IES.png`, `moc_pilot_v4_profile_comparison_IES.png`, `moc_streamfunction_v4_hovmoller.png`, `moc_streamfunction_v4_index_IES.png`, `moc_streamfunction_v4_mean_profile.png`, `moc_pilot_v5_vs_full_IES.png`, `moc_pilot_v5_profile_comparison_IES.png` — committed (not gitignored). **`moc_streamfunction_v4.m`/`moc_pilot_v5.m` are the current, most-correct MOC scripts (paper-correct definition + shelf transport + calibration-window fix) — prefer these over earlier versions going forward.**
-- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved) — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png` — committed (not gitignored).
+- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png` — committed (not gitignored).
