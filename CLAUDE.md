@@ -749,6 +749,23 @@ Computed magnitude-squared coherence (`mscohere`) and cross-spectral phase (`cps
 
 Outputs: `moc_coherence_test.m`, `moc_coherence_test_IES.png`, `moc_coherence_test.mat`.
 
+## Checking P1 for instrument glitches like site A's: `moc_p1_spike_test.m` (2026-08-18) — none found, P1's excess noise is continuous, not a few removable outliers
+
+Follow-up to the already-documented site A spikes ("Site A's spikes" section above: 3 isolated instrument-glitch-like outliers, 2020-06-20/2022-10-17/2022-10-18, none inside the 2013-2017 window) — checked whether P1, the other site the Pilot depends on and the one most implicated in the Gpan-noise and coherence findings above, has similar discrete glitches that could be cleaned up.
+
+Re-ran the exact same methodology (residual from a 31-day running median of raw `tau1000`, flagged past a 6σ threshold) on both sites side by side, over each site's full available record:
+
+| Site | Record | Residual σ | 6σ threshold | Outliers found | Inside 2013-2017 |
+|---|---|---|---|---|---|
+| A | 2009-03-18 to 2022-12-11 (5017 days) | 0.00186 | 0.01116 | 3 (2020-06-20, 2022-10-17, 2022-10-18) | 0 |
+| P1 | 2013-09-06 to 2023-09-24 (3671 days) | 0.00101 | 0.00604 | **0** | 0 |
+
+Reproduces site A's 3 already-documented outliers exactly (confirms the methodology is applied consistently), and finds **zero** outliers at P1 by the same criterion across its entire 10-year record.
+
+**Conclusion**: P1's elevated noise (established via `check_tau_noise.m`'s noise-to-signal ranking, `moc_gpan_noise_test.m`'s Gpan-level noise/signal ratio, and the weak/broadband coherence in `moc_coherence_test.m`) is **not** attributable to a handful of discrete, removable instrument glitches the way part of site A's raw signal is — it's continuous/distributed noise present throughout the series, not spikes that a simple de-spiking step could clean up. This also confirms the known site-A glitches are irrelevant to the paper's 2013-2017 comparison window specifically (all 3 fall outside it), so they were never a factor in the r=0.485-vs-0.73 gap this whole investigation has been chasing. Together with the ruled-out lag and BPR-reference hypotheses, this closes off "correctable data artifacts" as an explanation for the Pilot's excess noise — it appears to be a genuine, structural property of the endpoint sites' measurement noise (or real small-scale local variability) that a 2-point method has no way to average out, not a fixable data-quality issue.
+
+Outputs: `moc_p1_spike_test.m` (no `.mat`/figure — a print-only diagnostic, like `check_tau_noise.m`).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
