@@ -829,10 +829,104 @@ Outputs: `moc_pilot_kersale_original_data_test.m` (diagnostic, no committed figu
 
 Outputs: `moc_anomaly_fig5_raw_2013_2017_v2.m`, `moc_anomaly_fig5_raw_2013_2017_v2_IES.png`, `moc_anomaly_fig5_raw_2013_2017_v2.mat` (gitignored).
 
+## Quantifying the 2017-2020 mean shortfall directly: `moc_gapfill_2017_2020_test.m` (2026-08-28) -- gap-filling closes 61% of it, 39% still unexplained
+
+Follow-up question from the user, now that both the full array and the Pilot are known-correct (`moc_pilot_v6.m` fix, above): why does the MEAN specifically diverge so much between the two methods during the 2017-08/2020-01 coverage outage (gaps 3-6 -- D-P8, P8-P6, P6-P5, P5-P4 -- missing/degraded), while it matches well before and after? The mechanism (missing width) was already documented, but not quantified as a direct mean-attribution.
+
+**Method**: confirmed algebraically (and via a direct sanity check, `max|diff|=0.0000` Sv against `moc_streamfunction_v4.mat`'s own saved output) that `moc_streamfunction_v4.m`'s `transport_profile` reduces exactly to `nansum_i(Total_TPUD_i) + shelf_profile` -- i.e. each day's basin-wide transport-per-unit-depth is a literal sum across the 8 gaps' own `Total_TPUD_i`, where a gap with no data that day contributes exactly **zero** (via `nansum`), not "unknown." Built a **gap-filled** alternative: whenever a gap's `Total_TPUD_i` is NaN during the outage window specifically, substitute that gap's own long-term climatological (time-mean, computed from non-outage days only) profile instead of letting it silently drop to zero. (Used plain `nansum`, not built-in `sum`, when recombining the filled version too -- an early draft used `sum`, which spuriously propagated whole-day NaNs from an unrelated, separately-documented smaller 2020-2022 coverage patch outside the intentionally-filled window; fixed by matching `transport_actual`'s own `nansum` treatment, confirmed by re-checking that "normal" days are then bit-identical between the actual and filled versions.)
+
+**Missing-gap breakdown during the outage** (fraction of outage days each gap has no data, and its long-term-normal mean transport-per-unit-depth at 500dbar, m²/s): A-C 0% (always present), C-D 23%, **D-P8 83%** (typical contribution **+9603**), **P8-P6 100%** (-3532), **P6-P5 100%** (-2772), **P5-P4 100%** (typical contribution **+7814**), P4-P2 30%, P2-P1 0% (always present). Notably, two of the fully-missing gaps (D-P8, P5-P4) normally carry substantial *positive* (northward) transport -- their disappearance doesn't just add noise, it removes a real, large, systematically northward contribution from the sum.
+
+**Result, evaluated at `h_star=1190dbar` (the full array's own, from `moc_streamfunction_v4.mat`)**:
+
+| | Outage (2017-08/2020-01) mean | std |
+|---|---|---|
+| Full array, ACTUAL (as-is) | **-2.82 Sv** | 22.02 Sv |
+| Full array, GAP-FILLED | **13.35 Sv** | 21.38 Sv |
+| Pilot v6 | **23.49 Sv** | 10.11 Sv |
+
+Gap-filling with each missing gap's own climatology closes **61%** of the mean gap (Pilot-minus-actual = 26.31 Sv → Pilot-minus-filled = 10.14 Sv). This directly, quantitatively confirms the earlier qualitative "missing width" explanation: most of the mean shortfall is mechanical -- real, typically-positive transport contributions from D-P8 and P5-P4 specifically are structurally absent from the sum, not just noisier.
+
+**~39% (10.14 Sv) remains unexplained by this simple climatological gap-fill** -- candidate explanations, not yet tested: (a) a single whole-period time-mean climatology may be a poor proxy for what the missing gaps' transport actually looked like specifically during 2017-2020 (seasonal-cycle mismatch, or a genuine multi-year trend/regime difference coinciding with the outage rather than being caused by it); (b) the *surviving* gaps (A-C, partial C-D/P4-P2, P2-P1) might carry their own bias during this specific window, not just their usual noise level, that a "missing-width-only" framing doesn't capture. Investigation continuing at the user's request.
+
+Outputs: `moc_gapfill_2017_2020_test.m`, `moc_gapfill_2017_2020_test_IES.png`, `moc_gapfill_2017_2020_test.mat` (gitignored).
+
+### The residual 39% traced to a real bias in the SURVIVING gap P4-P2, not a climatology quality issue: `moc_gapfill_residual_investigation.m` (2026-08-28)
+
+Tested two candidate explanations for the ~10.14 Sv (39%) left unexplained by the flat-climatology gap-fill above: (a) the surviving gaps (A-C, partial C-D/P4-P2, P2-P1 -- the ones that DO have data during the outage) might carry their own systematic bias during 2017-2020, not just their usual noise level; (b) a single whole-period climatology might be a poor seasonal proxy for the missing gaps specifically.
+
+**(b) ruled out**: rebuilt the gap-fill using a day-of-year seasonal climatology (annual + semi-annual harmonic fit per gap/depth, least-squares on normal-period days only) instead of a flat time-mean. Result: 63% of the gap closed (13.75 Sv reconstructed mean) vs. 61% with the flat climatology (13.35 Sv) -- a marginal, not decisive, improvement. Seasonal mismatch is not the main driver.
+
+**(a) confirmed, and it's large**: compared each surviving gap's own mean transport (using only the days it actually has data) during the outage vs. its own long-term normal-period mean, depth-integrated 0-1190dbar (`h_star`):
+
+| Gap | Normal mean (Sv) | Outage-period mean (Sv, own data only) | Diff |
+|---|---|---|---|
+| A-C | -2.89 | -2.26 | +0.63 |
+| C-D | -3.35 | -4.87 | -1.52 |
+| **P4-P2** | **+12.54** | **+4.23** | **-8.31** |
+| P2-P1 | +1.14 | +1.87 | +0.73 |
+
+**Gap P4-P2 -- which is NOT missing during most of the outage (only ~30% of days) -- shows a large, real drop in its own measured transport specifically during 2017-2020**, from a normal +12.54 Sv contribution down to +4.23 Sv on the very days it has data. This single effect (-8.31 Sv) accounts for nearly the entire remaining ~10.14 Sv residual on its own -- **this is not a missing-data artifact at all, it's a genuine change in what P4-P2 itself measured during this window.**
+
+**Not yet resolved -- two very different possible explanations, with different stakes**:
+1. **Instrumental/data-quality**: the same underlying cause degrading P4/P5/P6/P8's coverage during this window (a broader eastern-array equipment issue) may also be biasing P4-P2's *values* on the days it's nominally "present," not just causing outright gaps elsewhere. P4 itself has its own partial outage inside this same window (2019-02 to 2019-09, already documented) -- consistent with, but not proof of, a data-quality explanation.
+2. **Real oceanographic signal**: a genuine, multi-year reduction in transport at this specific gap during 2017-2020, coincident with (but not caused by) the instrument outages elsewhere.
+
+**Why this matters beyond this project**: the user notes some researchers question whether the SAMBA/Pilot approach (2 endpoints) versus the full 9-site array gives a reliable MOC estimate -- if the 2017-2020 anomaly at P4-P2 is real oceanographic variability rather than an artifact, it would be exactly the kind of interior signal a 2-point Pilot method structurally cannot see, a substantive data point in that methodological debate. Distinguishing artifact from real signal here is a priority, not just a bookkeeping exercise.
+
+Outputs: `moc_gapfill_residual_investigation.m`, `moc_gapfill_residual_investigation.mat` (gitignored, no committed figure yet -- print-only diagnostic so far).
+
+### P4-P2's bias isolated to the RELATIVE/baroclinic component, and traced to a real shift in raw tau1000_P4 during 2018 -- open question: real signal or instrumental drift? (2026-08-28)
+
+Follow-up, using the same `_RefConst`/`_RelConst` component-decomposition variants already saved in Step E `v3`'s output (same technique as "Component breakdown of the 2017-2019 dip" above, applied there to the whole array's missing-gap dip -- here applied to gap 7 (P4-P2) specifically, which is NOT missing, to isolate which physical component drives ITS bias):
+
+| Variant (gap 7 = P4-P2 only) | Normal mean (Sv) | Outage-period mean (Sv) | Diff |
+|---|---|---|---|
+| Full | 12.54 | 4.23 | -8.31 |
+| `RefConst` (reference/BPR fixed, only relative varies) | 12.16 | 1.16 | -11.00 |
+| **`RelConst` (relative/baroclinic fixed, only reference varies)** | 11.03 | **13.75** | **+2.72** |
+
+**The bias disappears (and reverses sign) when the relative/baroclinic component is held fixed** -- isolating the cause to the density-structure (GEM-derived Gpan) signal specifically, not the BPR/reference. `EKMANconst` shows the same -8.32 Sv drop as `Full` (expected, Ekman is a small surface-only term, not the driver either).
+
+**Checked raw `tau1000_P4`/`tau1000_P2` directly, year by year** (the fundamental measurement `RelTPUD`/`Gpan` are built from): P4 shows a real, non-trivial shift in 2018 specifically -- 1.32981s mean, vs. ~1.326s in neighboring years (2016: 1.32790, 2017: 1.32649) -- **with full 365-day coverage that year**, so this isn't a data-sparsity/averaging artifact. P2 stays comparatively stable across the same years (1.3319-1.3320s). 2018's P4 shift precedes P4's own already-documented recording stoppage (Jan 2019) -- i.e. the instrument was actively recording, but with what looks like a biased/drifted value, not silence.
+
+**Genuinely open, two competing explanations, not distinguished with data available in this project**:
+1. **Instrumental**: the same broader eastern-array equipment degradation that caused P5/P6/P8's outright outages during 2017-2020 may have also biased P4's *values* specifically in 2018, before it stopped recording entirely in 2019 -- a drift-before-failure pattern, not proven but plausible given the timing.
+2. **Real oceanographic signal**: a genuine multi-year change in the density structure across the P4-P2 gap during 2017-2020.
+
+**Why this matters beyond bookkeeping (user's framing, 2026-08-28)**: some researchers in the field question whether a 2-endpoint ("Pilot") MOC estimate is as reliable as using the full resolved array -- if this P4-P2 anomaly is real oceanographic variability (not an instrument artifact), it is exactly the kind of *interior* signal a 2-point Pilot method structurally cannot see, which would be a substantive, concrete data point in that methodological debate rather than an abstract concern. Distinguishing artifact from real signal here would need external validation not available in this project (e.g. nearby CTD casts around P4 in 2018, or the mooring's servicing/calibration logs) -- flagged as a priority open question, not yet resolved.
+
+Outputs: diagnostic only so far (`/tmp/check_p4p2_vars.m`, `/tmp/check_p4p2_tau.m` -- scratch scripts, not saved in this repo; results reproduced in the tables above).
+
+### Resolved (mostly): independent ship-CTD ground-truth shows a ~7ms PIES-vs-CTD offset at THREE sites simultaneously -- points to a leg-wide (2017-2019) calibration bias, not a P4-specific drift or real ocean signal (2026-08-28)
+
+User's request: check `~/research/sambar/samba_e` for cruise CTD data that could independently validate whether the 2018 `tau1000_P4` anomaly is real or instrumental. Found `CTD data/2017_2018_2019/2_Oct2018_ALG253_RS Algoa/` -- a CTD transect from an October 2018 servicing cruise (RS Algoa, voyage ALG253), with a companion `Notes on CTD data.pdf` mapping specific stations to CPIES positions. Notes explicitly state: *"CTD transect only to position of 'Tall Mooring' SAMBA M10 -- 15°E... Only CPIES 3, CPIES 2 & CPIES 1 positions covered by transect"* -- station 1 (14°59.96'E) sits almost exactly on P4's nominal position (15.00°E), stations 9/10/12 are explicitly labeled CPIES3/CPIES2/CPIES1 (P8/P2/P1).
+
+**Method**: computed round-trip acoustic travel time to 1000dbar directly from each CTD cast's own measured sound-velocity profile (`svCM` column in the raw Sea-Bird `.cnv` files, Chen-Millero formula, already computed by the ship's processing software) -- `tau1000_CTD = 2 * integral_0^1000dbar(dz/c)`, using only the downcast portion of each yo-yo profile (the raw files contain both down- and up-casts; naively integrating both nearly cancels the result, caught by a first attempt returning a near-zero/negative travel time). This gives a completely independent, ship-based measurement of what `tau1000` "should" have read at that exact place and moment, with no PIES electronics or long-term mooring drift involved at all.
+
+**Result -- compared directly against the PIES-measured `tau1000` for the same day**:
+
+| Site | Date | PIES `tau1000` | CTD-derived `tau1000` | Diff (PIES − CTD) |
+|---|---|---|---|---|
+| P4 (stn001) | 2018-10-03 | 1.33060 s | 1.323033 s | **+0.00757 s** |
+| P2 (stn010) | 2018-10-05 | 1.33050 s | 1.323360 s | **+0.00714 s** |
+| P1 (stn012) | 2018-10-05 | 1.33110 s | 1.324482 s | **+0.00662 s** |
+| P8 (stn009) | 2018-10-05 | -- (NaN, P8's own known 2018-04/2019-09 gap) | 1.322127 s | n/a, no PIES value to compare |
+
+**The PIES sensors read systematically ~6.6-7.6ms HIGH relative to independent ship CTD, consistently at three different sites spanning 2.5° of longitude and very different water-mass regimes** (P4 near-open-ocean, P2 closer to the continental slope) -- roughly 9x the typical day-to-day measurement noise already established for these sites (~0.0008s, see the raw-`tau1000` noise sections above), and about 3x the ~0.0024s internal cross-calibration tolerance already documented elsewhere in this project (`SAMBA_E_IES/CLAUDE.md`'s from-scratch recalibration check).
+
+**Reinterprets the open question from the section above**: a uniform ~7ms offset appearing simultaneously at 3 sites with different hydrography is much more consistent with a **systematic calibration bias affecting the whole 2017-2019 deployment leg (D3)** of the East array than with either (a) a P4-specific instrument drift, or (b) a genuine, site-specific oceanographic signal -- real ocean variability would not be expected to shift three hydrographically-distinct sites by nearly the same amount. **This favors the instrumental explanation from the two candidates raised earlier, not the real-signal one** -- though not a clean, fully-isolated proof (the CTD casts are single snapshots, not a continuous validation record).
+
+**Why the anomaly showed up specifically at the P4-P2 *gap* (not P1-P2 or elsewhere)**: a bias common to both P4 and P2 does not simply cancel out of their `Gpan` difference, because the GEM lookup table's sensitivity of temperature/salinity to a given `tau1000` change is location-dependent (steeper/shallower depending on local water-mass structure) -- so even a near-identical *raw* `tau1000` offset at both sites can translate into a *different*-sized `Gpan` bias at each, leaving a net, non-cancelling residual in their difference (i.e. in `RelTPUD_7`/`Total_TPUD7`, the quantity already isolated as the source of the P4-P2 bias in the component-decomposition test above).
+
+**Not fully resolved**: this is evidence from a single cruise/snapshot in time, not a continuous, leg-wide validation record -- it strongly suggests a systematic calibration issue but doesn't yet quantify its time-evolution (constant offset since the July 2017 redeployment? growing drift, with Oct 2018 only one point along it?) or its magnitude at every site/depth. A fuller resolution would need either more CTD ground-truth casts from other points in the 2017-2019 deployment (if any exist), or a review of the original D3 calibration process itself.
+
+Outputs: diagnostic only (ad hoc `awk` sound-velocity integration on the raw `.cnv` files plus MATLAB comparison against `tau1000_P1/P2/P4`; not saved as a repo script -- results reproduced fully in the table above).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
 - `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat`, `moc_pilot_v2.mat`, `moc_streamfunction_v2.mat`, `moc_pilot_v3.mat`, `moc_streamfunction_v3.mat`, `moc_pilot_v4.mat`, `moc_streamfunction_v4.mat`, `moc_pilot_v5.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png`, `moc_pilot_v2_vs_full_IES.png`, `moc_pilot_v2_profile_comparison_IES.png`, `moc_streamfunction_v2_hovmoller.png`, `moc_streamfunction_v2_mean_profile.png`, `moc_streamfunction_v2_index_IES.png`, `moc_pilot_v3_vs_full_IES.png`, `moc_pilot_v3_profile_comparison_IES.png`, `moc_streamfunction_v3_hovmoller.png`, `moc_streamfunction_v3_index_IES.png`, `moc_streamfunction_v3_mean_profile.png`, `moc_pilot_v4_vs_full_IES.png`, `moc_pilot_v4_profile_comparison_IES.png`, `moc_streamfunction_v4_hovmoller.png`, `moc_streamfunction_v4_index_IES.png`, `moc_streamfunction_v4_mean_profile.png`, `moc_pilot_v5_vs_full_IES.png`, `moc_pilot_v5_profile_comparison_IES.png` — committed (not gitignored). **`moc_streamfunction_v4.m`/`moc_pilot_v5.m` are the current, most-correct MOC scripts (paper-correct definition + shelf transport + calibration-window fix) — prefer these over earlier versions going forward.**
-- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat`, `moc_coherence_test.mat`, `moc_pilot_kersale_original_data_test.mat`, `moc_pilot_v6.mat`, `moc_anomaly_fig5_raw_2013_2017_v2.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png`, `moc_coherence_test_IES.png`, `moc_pilot_v6_vs_full_IES.png`, `moc_pilot_v6_profile_comparison_IES.png`, `moc_anomaly_fig5_raw_2013_2017_v2_IES.png` — committed (not gitignored). **`moc_pilot_v6.m` is the current, most-correct Pilot script (fixes the BPR-sign and missing-ECCO-reference bugs) — prefer it over `v1`-`v5` going forward.**
+- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat`, `moc_coherence_test.mat`, `moc_pilot_kersale_original_data_test.mat`, `moc_pilot_v6.mat`, `moc_anomaly_fig5_raw_2013_2017_v2.mat`, `moc_gapfill_2017_2020_test.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png`, `moc_coherence_test_IES.png`, `moc_pilot_v6_vs_full_IES.png`, `moc_pilot_v6_profile_comparison_IES.png`, `moc_anomaly_fig5_raw_2013_2017_v2_IES.png`, `moc_gapfill_2017_2020_test_IES.png` — committed (not gitignored). **`moc_pilot_v6.m` is the current, most-correct Pilot script (fixes the BPR-sign and missing-ECCO-reference bugs) — prefer it over `v1`-`v5` going forward.**
