@@ -923,6 +923,33 @@ User's request: check `~/research/sambar/samba_e` for cruise CTD data that could
 
 Outputs: diagnostic only (ad hoc `awk` sound-velocity integration on the raw `.cnv` files plus MATLAB comparison against `tau1000_P1/P2/P4`; not saved as a repo script -- results reproduced fully in the table above).
 
+### Revised after checking the July 2017 (deployment) and October 2019 cruises too: the PIES-vs-CTD offset is NOT a simple monotonic drift -- it's present already at deployment and fluctuates (2026-08-28)
+
+Extended the CTD ground-truth check to the other two cruises in `CTD data/2017_2018_2019/`: `1_July2017_AGU026_SA AgulhasII` (the actual redeployment cruise for this leg -- CTDs done "on re-deployment of CPIES," per the notes doc) and `3_Oct2019_ALG265_RS Algoa` (a dense, ~37-station full-array transect). Two real parsing pitfalls hit and fixed while processing these older files: (1) both cruises use CRLF line endings + non-UTF8 (ISO-8859) encoding, which silently made every `grep`/`awk` pattern match nothing until `-a`/`LC_ALL=C` were added; (2) each cruise's `.cnv` column layout differs (July 2017: 23 fields, `prDM` at column 1; October 2019: 22 fields, but with a leading `pumps` status field shifting `prDM` to column 2) -- a hardcoded column index (which worked for the October 2018 file) silently produced nonsense on the other two casts (division-by-zero, or a bogus near-zero travel time from summing over the wrong columns) until column indices were parsed dynamically from each file's own `# name N = ...` header.
+
+**Also corrected a site-identification error along the way**: the cruise notes explicitly label a station "CPIES 4 deployment" at ~14.63°E in both the July 2017 and October 2019 cruises -- but `position_East.m` (this project's own authoritative position database, used throughout for every gap-distance calculation) gives `cpiesE(4).lon=15.0027`, and the October 2018 cruise's own notes separately describe its westernmost station as reaching only "the position of 'Tall Mooring' SAMBA M10 -- 15°E," explicitly NOT covering the CPIES4 position. Resolved by trusting position match (checking each candidate station's own internal `NMEA Latitude/Longitude` header) over the cruise notes' station labels -- for October 2019's dense transect this was straightforward (station 18 sits at 14.99947°E, an near-exact match); July 2017's grid has no station that close to 15.00°E (closest is ~14.63°E, ~40km off), so P4 has no usable comparison from that cruise.
+
+**Full result across all three cruises** (site, date, CTD-derived `tau1000`, PIES-measured `tau1000`, diff):
+
+| Site | Date | CTD | PIES | Diff (PIES−CTD) |
+|---|---|---|---|---|
+| P8 | 2017-07-22 (deployment) | 1.31496 | 1.32650 | **+0.01154** |
+| P2 | 2017-07-27 (deployment) | 1.32375 | 1.33173 | **+0.00798** |
+| P1 | 2017-07-27 (deployment) | 1.32875 | 1.33308 | **+0.00433** |
+| P4 | 2018-10-03 | 1.32303 | 1.33090 | +0.00787 |
+| P2 | 2018-10-05 | 1.32336 | 1.33070 | +0.00734 |
+| P1 | 2018-10-05 | 1.32448 | 1.33140 | +0.00692 |
+| P2 | 2019-10-14 | 1.32324 | 1.32732 | +0.00408 |
+| P1 | 2019-10-14 | 1.32491 | 1.32948 | +0.00457 |
+
+(P6/P5 have no PIES value at the July 2017 deployment date; P8/P6/P5/P4 have none at the October 2019 dates -- all consistent with each site's own already-documented coverage gaps.)
+
+**Revises the previous section's conclusion**: the offset is **not a monotonic drift that grows from zero over the deployment leg** -- it's already substantial at the moment of deployment itself (July 2017: +11.5ms at P8, +8.0ms at P2, +4.3ms at P1, when the sensor should be freshly calibrated), and for the two sites with data at all three cruises (P1, P2) it's **non-monotonic**: smaller at deployment (P1 +4.3ms, P2 +8.0ms), larger in October 2018 (P1 +6.9ms, P2 +7.3ms), smaller again by October 2019 (P1 +4.6ms, P2 +4.1ms).
+
+**Updated interpretation**: this pattern doesn't cleanly fit either of the two original hypotheses (steady instrumental drift vs. a real, P4-localized 2018 event) on its own. More likely a combination of (a) a baseline, site-dependent PIES-vs-CTD offset present from deployment onward (plausibly methodological -- e.g. a difference in exactly how "round-trip travel time to 1000dbar" is defined/computed between the ship-CTD sound-speed integration used here and the PIES's own onboard/processing calibration convention, or a genuine small calibration offset at redeployment), **plus** something additional that peaks specifically around October 2018 on top of that baseline -- coincident with the same period the P4-P2 gap's own raw `tau1000` and depth-integrated transport bias were found to peak. Still not conclusively resolved as "real" vs. "instrumental" for the 2018-specific component, but the simple "steady calibration drift" explanation is now disfavored by this fuller time series.
+
+Outputs: diagnostic only (same ad hoc `awk`/MATLAB approach as the Oct 2018 check, extended to 2 more cruises; not saved as a repo script -- full results in the table above).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
