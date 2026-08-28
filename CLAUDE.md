@@ -766,10 +766,69 @@ Reproduces site A's 3 already-documented outliers exactly (confirms the methodol
 
 Outputs: `moc_p1_spike_test.m` (no `.mat`/figure — a print-only diagnostic, like `check_tau_noise.m`).
 
+## MAJOR FINDING: the Pilot's correlation shortfall (0.485 vs. paper's 0.73) was two real coding bugs, not noise -- found by testing against Kersale's own original scripts/data, fixed in `moc_pilot_v6.m` (2026-08-27/28)
+
+After several sessions chasing the Pilot-vs-full-array correlation shortfall through noise-based hypotheses (lag analysis, BPR-vs-baroclinic component test, Gpan-noise ranking, cross-spectral coherence, P1 glitch check -- all documented above, all technically valid but ultimately secondary), the user's premise shifted: "eu acho que pode ser algum problema de cálculo... temos os dados e os programas da Kersale. Por que não estamos obtendo exatamente os mesmos valores?" This prompted a systematic search for, and comparison against, Kersalé's own original scripts and data -- not just the paper's summary statistics.
+
+### Inventory: original Kersalé scripts and data found on this machine
+
+**Published supplementary data** (`~/research/sambar/kersale/`, from Kersalé et al. 2020, *Science Advances*'s data package):
+- `data_A.txt`, `data_C.txt`, `data_D.txt` (West sites A/C/D) and `data_S.txt`/`data_U.txt`/`data_V.txt`/`data_W.txt`/`data_Y.txt`/`data_Z.txt` (East sites, mapped by nominal longitude to P8/P6/P5/P4/P2/P1 respectively -- confirmed via each file's "Site X nominal location" header line, e.g. V=11.2°E matches P5 exactly, Z=17.6°E/34.4°S matches P1) -- **calibrated, quality-controlled daily tau1000 + bottom-pressure anomaly**, all 9 sites, exactly 2013-09-11 to 2017-07-16 (1405 days, the paper's own window).
+- `Upper_Abyssal_Transport_Anomalies.txt` -- the **actual published daily MOCup/MOCab anomaly series** (relative to the paper's own 17.3 Sv/7.8 Sv means), same window -- ground truth, not just summary statistics.
+
+**Original scripts and saved outputs** (`Marions_code/Full_Depth_MOC/`, files dated 2021-2022, authorship confirmed via `/home/marion.kersale/...` paths in the headers -- i.e. **Marion Kersalé's own code**, not a third-party reimplementation; "Marion" throughout this whole project's `Marions_code` collaboration turns out to be Kersalé herself):
+- `MOC_Estimate_2cpies_constituents.m` -- **the original Pilot (2-CPIES, sites A/P1) script**.
+- `MOC_2cpies_FixeP.mat` -- its saved output (`MOC_Total`, 2009-2017).
+- `Full_Depth_OverturningEstimate.m` (Apr 2021) + `Wrk/Full_Depth_OvertuningEstimates.mat` -- the **original full-array script and output** (`Upper_Transport`/`Lower_Transport`, 1405 days), distinct from and predating the `_Cst_for_MHT` line this whole project has used.
+- `compare_referencing.m` -- Kersalé/Perez's own referencing-choice sensitivity tests (not yet used here).
+
+**Sanity check confirming these are the real thing**: correlating her own two saved original outputs directly (`MOC_2cpies_FixeP.mat`'s `MOC_Total` vs. `Full_Depth_OvertuningEstimates.mat`'s `Upper_Transport`, RAW daily, 1405 common days, 2013-2017) gives **r=0.712** -- essentially the paper's r=0.73, confirming these files really are (close to) what produced the published number, and giving a cleaner target to reproduce than the paper's rounded summary statistics alone. Means/stds also matched closely: her pilot 17.68 Sv/9.27 Sv, her full array 17.73 Sv/15.86 Sv (paper: 17.3 Sv full array, 17.7 Sv pilot, ~9 Sv pilot σ, 15.4 Sv full array daily σ).
+
+### Two real bugs found, comparing `MOC_Estimate_2cpies_constituents.m` line-by-line against `moc_pilot_v5.m`
+
+1. **Sign error in the BPR reference term.** Her original: `RefTPUD1 = (pres_P1 - pres_AtoZ) / (f*rhob_P1)`. Ours (`v1`-`v5`): `RefTPUD_pilot = (pres_AtoP1 - pres_P1) / (f*rhob_P1)` -- the exact negative (`pres_AtoZ`≡our `pres_AtoP1`, same formula, just renamed). This sign was never caught because `v1`'s header justified it "by analogy to gap 1's formula" rather than by checking against Kersalé's own Pilot-specific script (which didn't exist in this project's awareness until now).
+2. **An entire missing calibration step**: her original script adds a **time-mean ABSOLUTE reference velocity from ECCO at 1500dbar** (`DATA/ECCO/VVEL_Mean_34p5N.mat`, averaged over the ECCO longitude band between sites A and P1, converted to a transport-per-unit-depth via the A-to-P1 distance) on top of the demeaned-BPR reference -- exactly analogous to Step E's own "Add the time-mean velocity from OFES" step for the full array (already documented in `moc_streamfunction_v2.m`'s section above). `moc_pilot_v5.m` (and `v1`-`v4` before it) never had an equivalent step at all -- its BPR reference was purely relative/demeaned with **no absolute anchor whatsoever**. This had gone unnoticed because the Pilot's mean (~18-19 Sv) happened to already land in a plausible range without it, for unrelated reasons (the AREA_TOPO_pilot addition in `v2`, the shelf correction in `v4`) -- a case of two compensating-looking numbers masking a structurally incomplete calculation.
+
+### Diagnostic: `moc_pilot_kersale_original_data_test.m` -- our pipeline fed with HER raw data, both bugs isolated
+
+Built a script that takes Kersalé's own raw calibrated tau1000/BPR (`data_A.txt`/`data_Z.txt`) through the **original-era GEM tables** (`gem/west|east/Wrk/do_temper_field.mat`+`do_sal_field.mat`, dated March 2021 -- NOT `samba_w.mat`'s later retrained vintage, so the already-documented GEM-vintage confound doesn't contaminate this specific test) to regenerate T/S profiles exactly as her `IES_Make_Profiles_*.m` scripts do, then runs 4 variants of the downstream Pilot calculation:
+
+| Variant | h_star | mean | std | corr vs. her Pilot | corr vs. her full array |
+|---|---|---|---|---|---|
+| A: her sign + ECCO-mean (faithful replica) | 1310 dbar | 17.90 Sv | 9.53 Sv | **0.999** | **0.712** |
+| C/D: our sign, no ECCO-mean (= `v5.m`'s formula, on her data) | 1280 dbar | 16.98 Sv | 10.49 Sv | 0.470 | 0.452 |
+
+The faithful replica (variant A) reproduces her own saved output almost exactly (r=0.999) and lands right on the paper's r=0.73 (0.712). Feeding the SAME data through our OWN (buggy) formula instead collapses correlation to ~0.47 -- essentially identical to the 0.485 this project has been stuck at all along using our own reprocessed data. This isolates the cause cleanly: **the shortfall was never primarily about data/calibration/GEM-vintage/measurement noise -- it was these two coding bugs.**
+
+One implementation pitfall hit and fixed while building this diagnostic: `gsw_distance` returns **meters**, not km (confirmed directly from its own header, "Note. The output is in m not km" -- unlike `sw_dist(...,'km')`, which the original script uses and then explicitly converts `*1000`). An initial attempt double-converted (`dx_pilot*1000` on an already-meters `gsw_distance` output), inflating the ECCO reference term 1000x and producing a degenerate `h_star=0dbar` result -- caught by comparing against a hand-computed intermediate profile that looked physically sensible, then bisecting the pipeline stage by stage until the discrepancy was found.
+
+### Fix applied: `moc_pilot_v6.m` -- both bugs fixed, on OUR OWN data sources
+
+`moc_pilot_v6.m` is identical to `v5.m` except: (1) the `RefTPUD_pilot` sign is flipped to `(pres_P1 - pres_AtoP1)`, and (2) the ECCO time-mean absolute reference step is added, inserted **before** the `AREA_TOPO_pilot` multiplication (matching Step E's own ordering: absolute reference → preTopo save point → `AREA_TOPO` → Ekman → shelf). Everything else (data sources -- `samba_w.mat`/`IES_FrSA_SAMBA_6PIES.mat`, i.e. our own current reprocessed inputs, not Kersalé's raw data -- `AREA_TOPO_pilot`, Ekman, shelf correction, Kersalé streamfunction definition) is unchanged.
+
+**Result, over the paper's exact 2013-2017 window, RAW daily**:
+
+| | `v6` (fixed) | Paper |
+|---|---|---|
+| `h_star` | 1320 dbar | 1315 dbar |
+| Full array mean | 20.11 Sv | 17.3 Sv (already-documented GEM-vintage/Brazil-Current residual, unrelated to this fix) |
+| Pilot mean | 20.17 Sv | 17.7 Sv |
+| Full array std | 15.39 Sv | 15.4 Sv |
+| Pilot std | 9.65 Sv | ~9 Sv |
+| **corr(full, pilot)** | **0.726** | **0.73** |
+
+**Essentially closes the correlation gap this project has been investigating since the raw-Fig-5 reconstruction** (was 0.485) -- using only our own reprocessed data, no need for Kersalé's raw inputs in the final fix. Both bugs mattered: fixing only the sign or only the missing ECCO step was not tested in isolation on our own data (the Kersalé-data diagnostic above tested them only as a bundled pair, "C/D" vs "A"), but the near-exact match to 0.73 with both fixed together strongly suggests they were the dominant, and possibly the complete, explanation.
+
+**On the extended 2013-2022 record (45-day lowpass), correlation is still weak (0.275)** -- but this is the already-documented, unrelated 2017-2020 coverage-outage artifact (P5/P6/P4/P8 down, `moc_streamfunction_v4`'s full array plunging to -50Sv on some days while the Pilot, depending only on the always-present A/P1, stays level -- visually confirmed on `moc_pilot_v6_vs_full_IES.png`, same pattern as every prior version), not a re-emergence of the bugs just fixed.
+
+**Retrospective on the noise-based investigation (lag, BPR-vs-baroclinic, Gpan noise, coherence, P1 glitches)**: none of those findings were wrong on their own terms -- sites A/P1 genuinely are noisier than average, coherence genuinely was weak and broadband, BPR genuinely does contribute real signal rather than noise. But they were explaining a small residual around a fundamentally mis-calibrated Pilot construction, not the dominant effect. The lesson going forward (noted for future debugging sessions on this project): when a well-motivated original reference implementation exists, prioritize a direct line-by-line diff against it before extensive statistical/noise-based root-causing of a discrepancy.
+
+Outputs: `moc_pilot_kersale_original_data_test.m` (diagnostic, no committed figure -- print-only), `moc_pilot_v6.m`, `moc_pilot_v6_vs_full_IES.png`, `moc_pilot_v6_profile_comparison_IES.png`, `moc_pilot_v6.mat` (gitignored). **`moc_pilot_v6.m` is now the current, most-correct Pilot script** -- prefer it over `v1`-`v5` going forward (kept for history, per this project's versioning convention).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
 - `mov_IES.png` — plot output from `mov_samba_marion*.m`, committed (not gitignored). Since `v15`, shades reduced-coverage periods in 4 graded gray bands by how many of the 9 original sites were present each day.
 - `mht_IES.png` — plot output from `mht_samba_marion*.m`, committed (not gitignored). Same graded coverage shading as `mov_IES.png`.
 - `moc_streamfunction_v1.mat`, `moc_pilot_v1.mat`, `moc_pilot_lnm_v1.mat`, `moc_pilot_v2.mat`, `moc_streamfunction_v2.mat`, `moc_pilot_v3.mat`, `moc_streamfunction_v3.mat`, `moc_pilot_v4.mat`, `moc_streamfunction_v4.mat`, `moc_pilot_v5.mat` — gitignored. `moc_streamfunction_hovmoller.png`, `moc_streamfunction_mean_profile.png`, `moc_index_IES.png`, `moc_pilot_vs_full_IES.png`, `moc_profile_comparison_IES.png`, `moc_pilot_lnm_vs_bpr_IES.png`, `moc_pilot_v2_vs_full_IES.png`, `moc_pilot_v2_profile_comparison_IES.png`, `moc_streamfunction_v2_hovmoller.png`, `moc_streamfunction_v2_mean_profile.png`, `moc_streamfunction_v2_index_IES.png`, `moc_pilot_v3_vs_full_IES.png`, `moc_pilot_v3_profile_comparison_IES.png`, `moc_streamfunction_v3_hovmoller.png`, `moc_streamfunction_v3_index_IES.png`, `moc_streamfunction_v3_mean_profile.png`, `moc_pilot_v4_vs_full_IES.png`, `moc_pilot_v4_profile_comparison_IES.png`, `moc_streamfunction_v4_hovmoller.png`, `moc_streamfunction_v4_index_IES.png`, `moc_streamfunction_v4_mean_profile.png`, `moc_pilot_v5_vs_full_IES.png`, `moc_pilot_v5_profile_comparison_IES.png` — committed (not gitignored). **`moc_streamfunction_v4.m`/`moc_pilot_v5.m` are the current, most-correct MOC scripts (paper-correct definition + shelf transport + calibration-window fix) — prefer these over earlier versions going forward.**
-- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat`, `moc_coherence_test.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png`, `moc_coherence_test_IES.png` — committed (not gitignored).
+- `moc_anomaly_fig5_raw_2013_2017.mat`, `moc_pilot_component_test` (no `.mat` saved), `moc_gpan_noise_test.mat`, `moc_coherence_test.mat`, `moc_pilot_kersale_original_data_test.mat`, `moc_pilot_v6.mat` — gitignored/not saved. `moc_anomaly_fig5_raw_2013_2017_IES.png`, `moc_pilot_component_test_IES.png`, `moc_gpan_noise_test_IES.png`, `moc_coherence_test_IES.png`, `moc_pilot_v6_vs_full_IES.png`, `moc_pilot_v6_profile_comparison_IES.png` — committed (not gitignored). **`moc_pilot_v6.m` is the current, most-correct Pilot script (fixes the BPR-sign and missing-ECCO-reference bugs) — prefer it over `v1`-`v5` going forward.**
