@@ -950,6 +950,27 @@ Extended the CTD ground-truth check to the other two cruises in `CTD data/2017_2
 
 Outputs: diagnostic only (same ad hoc `awk`/MATLAB approach as the Oct 2018 check, extended to 2 more cruises; not saved as a repo script -- full results in the table above).
 
+### Depth profile of the P4-P2 bias: same shape as the gap's own dominant mode, just scaled down -- consistent with a GEM-mediated effect, not a depth-localized anomaly (2026-08-28): `moc_p4p2_depth_profile.m`
+
+Follow-up: compared `Total_TPUD7`'s (gap P4-P2) full-depth time-mean profile (normal days vs. outage days, 0-5150dbar, not just the 0-1190dbar integral already used) to see whether the bias concentrates at a specific depth (favoring a real, localized signal) or scales the gap's existing vertical structure (favoring a `tau1000`/GEM-mediated effect, consistent with the CTD-based finding above).
+
+| Pressure (dbar) | Normal (m²/s) | Outage (m²/s) | Diff |
+|---|---|---|---|
+| 0 | 23181 | 9103 | -14078 |
+| 200 | 19695 | 7566 | -12128 |
+| 500 | 11636 | 4056 | -7580 |
+| 900 | 3607 | 542 | -3065 |
+| 1190 (h_star) | -375 | -1278 | -903 |
+| 1500 | -3390 | -2667 | +723 |
+| 3000 | -6780 | -4121 | +2658 |
+| 4500 | -1799 | -1020 | +778 |
+
+**Result: the two profiles (`moc_p4p2_depth_profile_IES.png`) have the SAME shape -- strongly positive near the surface, decreasing smoothly through the thermocline, crossing zero around 1200-1300dbar, negative through the deep water, tapering back toward zero near the seafloor -- the outage-period curve is essentially a uniformly compressed/damped version of the normal-period curve, not a differently-shaped or depth-localized anomaly.**
+
+**Interpretation**: this is the textbook signature of a reduced-AMPLITUDE dominant GEM mode, not a depth-specific event. A genuine, localized real oceanographic anomaly (e.g. an intrusion at a particular layer) would be expected to distort the profile's *shape*; here the shape is preserved and only the amplitude changes, which is exactly what a `tau1000` bias propagating through the (roughly linear, for small perturbations) GEM lookup would produce -- reinforcing (without fully proving) the instrumental/methodological explanation over a real, depth-specific signal.
+
+Outputs: `moc_p4p2_depth_profile.m`, `moc_p4p2_depth_profile_IES.png`.
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
