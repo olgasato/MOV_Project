@@ -971,6 +971,27 @@ Follow-up: compared `Total_TPUD7`'s (gap P4-P2) full-depth time-mean profile (no
 
 Outputs: `moc_p4p2_depth_profile.m`, `moc_p4p2_depth_profile_IES.png`.
 
+### Closing the CTD ground-truth check: P8/P6/P5 can't be validated with the available cruises; a same-cruise repeat cast confirms the CTD method itself is precise (2026-08-28)
+
+Checked whether the October 2018 (ALG253) cruise had any stations near P8 (0°E), P6 (7.45°E), or P5 (11.2°E) -- confirmed directly from the cruise notes and each station's own position that it doesn't: the transect starts at station 1 (~15°E, the "Tall Mooring M10"/P4 position) and runs only eastward to the shelf break near Cape Town (18.3°E) before doubling back to re-occupy stations near 15-17°E again (stations 20-22). It never went west of 15°E, so P8/P6/P5 are simply outside this cruise's geographic coverage -- not a gap in this analysis, a real absence of data.
+
+**Full picture across all three cruises, by site**:
+
+| Site | Jul 2017 (deployment) | Oct 2018 | Oct 2019 |
+|---|---|---|---|
+| P8 | CTD+PIES, diff +11.5ms | *(cruise didn't go there)* | CTD only (PIES in its own gap) |
+| P6 | CTD only (no PIES yet) | *(cruise didn't go there)* | CTD only (PIES in its own gap) |
+| P5 | CTD only (no PIES yet) | *(cruise didn't go there)* | CTD only (PIES in its own gap) |
+| P4 | *(no nearby station)* | CTD+PIES, diff +7.9ms | CTD only (PIES in its own gap) |
+| P2 | CTD+PIES, diff +8.0ms | CTD+PIES, diff +7.3ms | CTD+PIES, diff +4.1ms |
+| P1 | CTD+PIES, diff +4.3ms | CTD+PIES, diff +6.9ms | CTD+PIES, diff +4.6ms |
+
+P8/P6/P5 never have both a nearby CTD cast AND a valid PIES value on the same date across any of the three available cruises -- either the ship didn't visit (Oct 2018), or the site was already within its own documented coverage gap when the ship did visit (Jul 2017 for P6/P5; Oct 2019 for all three). This CTD-based cross-validation approach cannot be extended to those three sites with the data available in this project.
+
+**Bonus repeatability check**: station 22 of the October 2018 cruise is a near-exact repeat of station 1's position (14°58.95'E vs. 14°59.96'E -- both essentially at the M10/P4 location), cast 13 days later (16-Oct-2018 vs. 03-Oct-2018). CTD-derived `tau1000`: 1.323185s vs. 1.323033s -- a **0.15ms** difference between two independent casts at the same place, less than two weeks apart. This confirms the CTD-derived `tau1000` computation itself is highly repeatable and not a source of the ~7ms PIES-vs-CTD offset found elsewhere -- the discrepancy is real, not CTD measurement noise.
+
+Outputs: diagnostic only (same ad hoc `awk` approach; not saved as a repo script).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
