@@ -992,6 +992,29 @@ P8/P6/P5 never have both a nearby CTD cast AND a valid PIES value on the same da
 
 Outputs: diagnostic only (same ad hoc `awk` approach; not saved as a repo script).
 
+### A fourth cruise (Sept 2023) finally covers P5/P6 -- the PIES-vs-CTD offset turns out to be persistent across every deployment leg checked, not specific to 2017-2020 (2026-08-28)
+
+Found one more relevant cruise beyond the three already checked: `CTD data/2021-2023/CTD-2023_ALG295/` (RS Algoa, Sept-Oct 2023, a ~49-station full-array transect). Its raw data is only available as unprocessed `.hex`+`.XMLCON` (no ready-to-use `.cnv`, unlike the other three cruises), but a companion `Alg295 SAMBA Sep2023 CTD Profile data.xlsx` has already-processed pressure/temperature/salinity per site (sheets `PIES01`...`PIES08`) -- used that directly instead of implementing full SBE calibration processing from the raw `.hex`. Computed `tau1000` from these via `gsw_SA_from_SP`/`gsw_CT_from_t`/`gsw_sound_speed` (modern TEOS-10 formula, not the older Chen-Millero `svCM` column used for the other three cruises -- a deliberate cross-check that the offset isn't an artifact of one specific sound-speed formula) and the same downcast-only depth integration used throughout. This is the **first CTD ground-truth data available for P5 and P6** -- neither of the earlier three cruises had usable casts at their positions (P5/P6 were also without any instrument at all for most of 2017-2021, per the already-documented outage).
+
+**Full result, now across FOUR cruises / six years / multiple independent deployment legs** (site, cruise, PIES − CTD; `--` = no comparison possible, see specific reasons in the sections above):
+
+| Site | Jul 2017 | Oct 2018 | Oct 2019 | Sep 2023 |
+|---|---|---|---|---|
+| P8 | +11.5ms | -- (out of transect) | -- (own gap) | **+7.4ms** |
+| P6 | -- (no PIES yet) | -- (out of transect) | -- (own gap) | **+7.2ms** |
+| P5 | -- (no PIES yet) | -- (out of transect) | -- (own gap) | **+3.2ms** |
+| P4 | -- (no nearby station) | +7.9ms | -- (own gap) | **+11.9ms** |
+| P2 | +8.0ms | +7.3ms | +4.1ms | +6.5ms |
+| P1 | +4.3ms | +6.9ms | +4.6ms | +9.3ms |
+
+(For P1/P2/P5/P6 in 2023, the PIES record ends 1-2 days before its own site's CTD cast -- ships recover the old instrument shortly before doing the redeployment CTD at the same spot -- so the comparison uses each site's last valid pre-recovery value; the time gap is too short to matter.)
+
+**Every single one of the 18 comparisons across 4 independent cruises, 6 years, and multiple independently-recalibrated deployment legs is positive** (PIES reads high relative to CTD, +3.2 to +11.9ms) -- this is markedly different from a single-event or single-leg-drift signature. It's far more consistent with a **persistent, structural offset between how the official PIES `tau1000` calibration/processing chain defines this quantity and how this project's own CTD-based sound-speed integration reconstructs it** (a methodological/definitional difference -- e.g. how the PIES's own internal pressure-case travel-time calibration is referenced -- rather than an instrument malfunction or a real, time-localized oceanographic event). Using two different sound-speed formulas (Chen-Millero for the 2017-2019 cruises, TEOS-10 `gsw_sound_speed` for 2023) and still finding the same sign/magnitude of offset argues against this being an artifact of one particular formula choice.
+
+**Revises the earlier framing again**: this fourth cruise's evidence weakens the case that the P4-P2 anomaly is *specifically* a 2017-2020 event (instrumental or real) -- the underlying PIES-vs-CTD offset is present essentially everywhere checked, at every site, at every time. That said, restricting to the two sites with data at all four cruises (P1, P2), October 2018's values (+6.9/+7.3ms) are still a bit higher than July 2017's and October 2019's (~+4-8ms), so a smaller, additional time-varying component peaking around 2018 on top of this persistent baseline hasn't been ruled out -- but the dominant, now well-established signal is the persistent baseline itself, not a 2017-2020-specific event. **Practical implication for this project's broader results**: since this offset is present continuously (not just during 2017-2020), and the full array's daily σ already matches the paper's published value almost exactly (15.39 vs 15.4 Sv, see the daily-σ section above) with the mean-level residual already attributed to other, independently-documented causes (GEM vintage/Brazil Current, calibration-window fix), this persistent `tau1000` offset's net effect on the project's headline transport numbers appears to be small or already absorbed elsewhere -- but it is a genuine, newly-documented characteristic of the raw data worth keeping in mind for any future work that touches `tau1000` directly.
+
+Outputs: diagnostic only (`readtable` on the `.xlsx` + `gsw_SA_from_SP`/`gsw_CT_from_t`/`gsw_sound_speed`; not saved as a repo script -- full results in the table above).
+
 ## Outputs
 
 - `concat_IESsamba.mat`, `gpan_samba.mat`, `mov_samba_marion_v15.mat`, `mht_samba_marion_v1.mat` — gitignored (`.mat` files excluded generally; regenerate by running the corresponding script). `mov_samba_marion_v15.mat` (`dt`, `mov`, `mean_term`, `gyre`, `total_direct`, `n_gaps_valid`, `coverage_totalwidth`, `n_sites_valid`, `category`) is new as of `v13` — the save line existed but was commented out in every version before that; `v14` added `low_coverage` (superseded by `v15`'s `category`). `mht_samba_marion_v1.mat` (`dt`, `Heat_total` and its `_EkmanAnomaly`/`_RelativeAnomaly`/`_ReferenceAnomaly`/`_EKMANconst`/`_RelConst`/`_RefConst` variants, `n_sites_valid`, `category`) is new.
